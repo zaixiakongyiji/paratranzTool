@@ -39,7 +39,10 @@ export async function render(container, query) {
       container.innerHTML = `
         <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
           <h2>文件列表 (Project ID: ${projectId})</h2>
-          <button id="btn-back" class="btn">返回项目列表</button>
+          <div>
+            <button id="btn-sync-rag" class="btn" style="margin-right: 0.5rem;" title="从该项目拉取最新已翻/通过词条"><i class="fas fa-sync-alt"></i> 同步语料库</button>
+            <button id="btn-back" class="btn">返回项目</button>
+          </div>
         </div>
 
         <!-- 筛选栏 -->
@@ -60,6 +63,37 @@ export async function render(container, query) {
           renderPage();
         });
       });
+
+      const btnSync = document.getElementById('btn-sync-rag');
+      if (btnSync) {
+        btnSync.addEventListener('click', async () => {
+          const { Storage } = await import('../utils/storage.js');
+          const settings = Storage.getSettings();
+          if (!settings.embeddingEnabled) {
+            const { showToast } = await import('../components/toast.js');
+            showToast('请先在配置页开启向量化模型', 'warning');
+            return;
+          }
+          
+          btnSync.disabled = true;
+          btnSync.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 同步中...';
+          
+          try {
+            const { RAG } = await import('../utils/rag.js');
+            const { showToast } = await import('../components/toast.js');
+            await RAG.syncCorpus(projectId, (status, detail) => {
+              showToast(detail, 'info');
+            });
+            showToast('全项目语料库同步完成！', 'success');
+          } catch (e) {
+            const { showToast } = await import('../components/toast.js');
+            showToast('同步失败: ' + e.message, 'error');
+          } finally {
+            btnSync.disabled = false;
+            btnSync.innerHTML = '<i class="fas fa-sync-alt"></i> 同步语料库';
+          }
+        });
+      }
 
       renderFileList();
     }

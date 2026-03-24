@@ -50,7 +50,6 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
           <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
             <h3 style="margin: 0;">词条列表</h3>
             <div style="display: flex; gap: 0.3rem;">
-              <button id="btn-sync-rag" class="btn btn-sm" title="同步语料库"><i class="fas fa-sync-alt"></i></button>
               <button id="btn-sort" class="btn btn-sm" title="按更新时间排序">
                 <i class="fas fa-sort"></i> ${sortOrder === 'none' ? '' : (sortOrder === 'asc' ? '↑' : '↓')}
               </button>
@@ -73,14 +72,15 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
           <div style="flex: 1; display: flex; flex-direction: column; gap: 1rem;">
             <div style="flex: 1; display: flex; flex-direction: column;">
               <label style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 0.5rem; display:block;">原文</label>
-              <div id="text-original" style="flex: 1; background: var(--bg-color); padding: 1rem; border-radius: 6px; border: 1px solid var(--border-color); overflow-y: auto; font-size: 1.1rem; line-height: 1.6;"></div>
+              <div id="text-original" style="flex: 1; background: var(--bg-color); padding: 1rem; border-radius: 6px; border: 1px solid var(--border-color); overflow-y: auto; font-size: 1.1rem; line-height: 1.6; white-space: pre-wrap;"></div>
             </div>
             
             <div style="display: flex; gap: 0.8rem;">
               <button id="btn-ai-translate" class="btn btn-primary" style="flex: 1"><i class="fas fa-robot"></i> AI 执行翻译</button>
-              <button id="btn-ai-suggest" class="btn" style="padding: 0 0.8rem;" title="提供修改建议重新生成"><i class="fas fa-comment-dots"></i> 修改建议</button>
+              <button id="btn-get-rag" class="btn" style="white-space: nowrap;" title="手动从本地语料库检索参考"><i class="fas fa-search"></i> 检索参考</button>
+              <button id="btn-tm-match" class="btn" style="white-space: nowrap;"><i class="fas fa-database"></i> 记忆库</button>
               <button id="btn-toggle-candidates" class="btn" style="padding: 0 0.8rem;" title="展开/收起 AI 候选面板"><i class="fas fa-layer-group"></i> 已有候选</button>
-              <button id="btn-tm-match" class="btn" style="flex: 1"><i class="fas fa-database"></i> 重新匹配 TM</button>
+              <button id="btn-ai-suggest" class="btn" style="padding: 0 0.8rem;" title="提供修改建议重新生成"><i class="fas fa-comment-dots"></i> 修改建议</button>
             </div>
             
             <div id="ai-suggest-panel" style="display: none; margin-top: 0.8rem; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.8rem; background: var(--bg-surface);">
@@ -191,32 +191,6 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
       });
     });
 
-    // RAG 语料库同步按钮
-    document.getElementById('btn-sync-rag').addEventListener('click', async () => {
-      const settings = Storage.getSettings();
-      if (!settings.embeddingEnabled) {
-        showToast('请先在设置页开启向量化模型并配置 API', 'warning');
-        return;
-      }
-      
-      const btn = document.getElementById('btn-sync-rag');
-      btn.disabled = true;
-      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-      
-      try {
-        const { RAG } = await import('../utils/rag.js');
-        await RAG.syncCorpus(projectId, (status, detail) => {
-          showToast(detail, 'info');
-        });
-        showToast('语料库同步完成！', 'success');
-      } catch (e) {
-        showToast('同步失败: ' + e.message, 'error');
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-sync-alt"></i>';
-      }
-    });
-
     initWorkbenchLogic();
   }
 
@@ -256,38 +230,12 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
     if (suggestPanel) suggestPanel.style.display = 'none';
     if (suggestInput) suggestInput.value = '';
 
-    // 重置 RAG 参考面板
+    // 重置 RAG 参考面板（不在这里自动检索，等用户手动点击大按钮时检索）
     currentReferences = [];
     const ragPanel = document.getElementById('rag-ref-panel');
     if (ragPanel) ragPanel.style.display = 'none';
 
-    // 异步触发 RAG 检索（不阻塞主 UI）
-    const settings = Storage.getSettings();
-    if (settings.embeddingEnabled && str.original) {
-      import('../utils/rag.js').then(async ({ RAG }) => {
-        try {
-          const refs = await RAG.retrieveReferences(projectId, str.original, { fileId });
-          // 确保用户没有切换到其他词条
-          if (currentIndex === index && refs.length > 0) {
-            currentReferences = refs;
-            const ragList = document.getElementById('rag-ref-list');
-            const ragPanel = document.getElementById('rag-ref-panel');
-            ragList.innerHTML = refs.map((ref, i) =>
-              `<div style="padding: 0.4rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-color);">
-                <div style="color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 0.2rem;">相似度: ${(ref.score * 100).toFixed(1)}% | ${ref.fileName}</div>
-                <div style="font-size: 0.8rem;"><strong>原:</strong> ${ref.original.substring(0, 80)}...</div>
-                <div style="font-size: 0.8rem; color: var(--success-color);"><strong>译:</strong> ${ref.translation.substring(0, 80)}...</div>
-              </div>`
-            ).join('');
-            ragPanel.style.display = 'block';
-          }
-        } catch (e) {
-          console.warn('RAG 检索失败:', e);
-        }
-      });
-    }
-
-    // 已审核防误触保护
+    // 已审核防互触保护
     const isReviewed = str.stage === 2;
     const translationArea = document.getElementById('text-translation');
     const btnSubmit = document.getElementById('btn-submit');
@@ -415,6 +363,55 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
       document.getElementById('rag-ref-panel').style.display = 'none';
     });
 
+    // 手动获取 RAG 参考
+    async function doFetchRag() {
+      if (currentIndex === -1) return false;
+      const str = strings[currentIndex];
+      const settings = Storage.getSettings();
+      if (!settings.embeddingEnabled) {
+        showToast('未开启向量化模型，无法检索', 'warning');
+        return false;
+      }
+      
+      const btnRag = document.getElementById('btn-get-rag');
+      if (btnRag) {
+        btnRag.disabled = true;
+        btnRag.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 检索中...';
+      }
+      
+      try {
+        const { RAG } = await import('../utils/rag.js');
+        const refs = await RAG.retrieveReferences(projectId, str.original, { fileId });
+        currentReferences = refs;
+        if (refs.length > 0) {
+          const ragList = document.getElementById('rag-ref-list');
+          const ragPanel = document.getElementById('rag-ref-panel');
+          ragList.innerHTML = refs.map((ref, i) =>
+            `<div style="padding: 0.4rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-color);">
+              <div style="color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 0.2rem;">相似度: ${(ref.score * 100).toFixed(1)}% | ${ref.fileName}</div>
+              <div style="font-size: 0.8rem;"><strong>原:</strong> ${ref.original.substring(0, 80)}...</div>
+              <div style="font-size: 0.8rem; color: var(--success-color);"><strong>译:</strong> ${ref.translation.substring(0, 80)}...</div>
+            </div>`
+          ).join('');
+          ragPanel.style.display = 'block';
+          return true;
+        } else {
+          showToast('未找到高相关历史参考', 'info');
+          return false;
+        }
+      } catch (e) {
+        showToast('RAG 检索失败: ' + e.message, 'error');
+        return false;
+      } finally {
+        if (btnRag) {
+          btnRag.disabled = false;
+          btnRag.innerHTML = '<i class="fas fa-search"></i> 检索参考';
+        }
+      }
+    }
+
+    document.getElementById('btn-get-rag').addEventListener('click', doFetchRag);
+
     async function doAiTranslate(suggestion = null) {
       if (currentIndex === -1) return;
       const str = strings[currentIndex];
@@ -424,6 +421,12 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
       const prevBtn = document.getElementById('btn-show-prev');
       const prevItemsEl = document.getElementById('ai-prev-items');
       
+      // 如果还没查参考，顺手查一下
+      const settings = Storage.getSettings();
+      if (settings.embeddingEnabled && currentReferences.length === 0) {
+        await doFetchRag();
+      }
+
       btn.disabled = true;
       btn.innerText = suggestion ? '获取建议修改中...' : 'AI 翻译中...';
       const textTranslation = document.getElementById('text-translation');
