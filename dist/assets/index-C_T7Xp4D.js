@@ -1,0 +1,22 @@
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/projects-DbYeYvTt.js","assets/paratranz-BehdmDyJ.js","assets/storage-BQ5PE7ds.js","assets/toast-_A8NGhfi.js","assets/files-8tOonCoD.js","assets/translate-C16uWywh.js","assets/ai-DnHPoARo.js","assets/terms-LARwpmJ0.js","assets/glossary-CmzHQnxh.js","assets/settings-CrNyo2fa.js"])))=>i.map(i=>d[i]);
+(function(){const c=document.createElement("link").relList;if(c&&c.supports&&c.supports("modulepreload"))return;for(const e of document.querySelectorAll('link[rel="modulepreload"]'))m(e);new MutationObserver(e=>{for(const r of e)if(r.type==="childList")for(const n of r.addedNodes)n.tagName==="LINK"&&n.rel==="modulepreload"&&m(n)}).observe(document,{childList:!0,subtree:!0});function d(e){const r={};return e.integrity&&(r.integrity=e.integrity),e.referrerPolicy&&(r.referrerPolicy=e.referrerPolicy),e.crossOrigin==="use-credentials"?r.credentials="include":e.crossOrigin==="anonymous"?r.credentials="omit":r.credentials="same-origin",r}function m(e){if(e.ep)return;e.ep=!0;const r=d(e);fetch(e.href,r)}})();const _="modulepreload",y=function(a){return"/"+a},h={},u=function(c,d,m){let e=Promise.resolve();if(d&&d.length>0){document.getElementsByTagName("link");const n=document.querySelector("meta[property=csp-nonce]"),i=(n==null?void 0:n.nonce)||(n==null?void 0:n.getAttribute("nonce"));e=Promise.allSettled(d.map(t=>{if(t=y(t),t in h)return;h[t]=!0;const o=t.endsWith(".css"),s=o?'[rel="stylesheet"]':"";if(document.querySelector(`link[href="${t}"]${s}`))return;const l=document.createElement("link");if(l.rel=o?"stylesheet":_,o||(l.as="script"),l.crossOrigin="",l.href=t,i&&l.setAttribute("nonce",i),document.head.appendChild(l),o)return new Promise((v,g)=>{l.addEventListener("load",v),l.addEventListener("error",()=>g(new Error(`Unable to preload CSS for ${t}`)))})}))}function r(n){const i=new Event("vite:preloadError",{cancelable:!0});if(i.payload=n,window.dispatchEvent(i),!i.defaultPrevented)throw n}return e.then(n=>{for(const i of n||[])i.status==="rejected"&&r(i.reason);return c().catch(r)})};function p(){document.getElementById("router-view");const a=document.getElementById("header");a.innerHTML=`
+    <h2>ParaTranz 残疾版</h2>
+    <nav>
+      <button class="btn" id="nav-projects">项目</button>
+      <button class="btn" id="nav-settings">设置</button>
+    </nav>
+  `,document.getElementById("nav-projects").addEventListener("click",()=>{f("/projects")}),document.getElementById("nav-settings").addEventListener("click",()=>{f("/settings")});const c=()=>f(location.hash.slice(1)||"/settings",!0);window.addEventListener("hashchange",c),c()}function f(a,c=!1){if(location.hash.slice(1)!==a&&!c){location.hash=a;return}const[d,m]=a.split("?"),e=new URLSearchParams(m||""),r=document.getElementById("router-view");r.innerHTML='<div style="text-align:center; padding: 2rem;">加载中...</div>';const i={"/projects":{render:(t,o)=>u(()=>import("./projects-DbYeYvTt.js"),__vite__mapDeps([0,1,2,3])).then(s=>s.render(t,o))},"/files":{render:(t,o)=>u(()=>import("./files-8tOonCoD.js"),__vite__mapDeps([4,1,2])).then(s=>s.render(t,o))},"/translate":{render:(t,o)=>u(()=>import("./translate-C16uWywh.js"),__vite__mapDeps([5,1,2,6,3])).then(s=>s.render(t,o))},"/terms":{render:(t,o)=>u(()=>import("./terms-LARwpmJ0.js"),__vite__mapDeps([7,1,2])).then(s=>s.render(t,o))},"/glossary":{render:(t,o)=>u(()=>import("./glossary-CmzHQnxh.js"),__vite__mapDeps([8,2,3])).then(s=>s.render(t,o))},"/settings":{render:(t,o)=>u(()=>import("./settings-CrNyo2fa.js"),__vite__mapDeps([9,2])).then(s=>s.render(t,o))}}[d];i?i.render(r,e):r.innerHTML=`<h2>404</h2><p>未找到页面: ${a}</p>`}const E=Object.freeze(Object.defineProperty({__proto__:null,initRouter:p,navigate:f},Symbol.toStringTag,{value:"Module"}));document.querySelector("#app").innerHTML=`
+  <div class="app-container">
+    <header id="header" class="glass-panel" style="margin-bottom: 2rem; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center;">
+      <h1 style="font-size: 1.5rem; color: var(--accent-color); margin: 0; cursor: pointer;" id="logo">ParaTranz AI</h1>
+      <nav style="display: flex; gap: 1.5rem;">
+        <a href="#/projects" class="nav-link">项目</a>
+        <a href="#/glossary" class="nav-link">个人知识库</a>
+        <a href="#/settings" class="nav-link">设置</a>
+      </nav>
+    </header>
+    <main id="router-view">
+      <div class="loading-state">应用初始化中...</div>
+    </main>
+  </div>
+`;window.addEventListener("DOMContentLoaded",()=>{p()});export{u as _,f as n,E as r};
