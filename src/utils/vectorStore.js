@@ -189,11 +189,15 @@ export const VectorStore = {
               missing.push(item);
             }
           }
-          await new Promise((res) => { txWrite.oncomplete = res; });
+          await new Promise((resolve, reject) => {
+            txWrite.oncomplete = resolve;
+            txWrite.onerror = () => reject(txWrite.error);
+          });
           return missing;
         }
       } catch (e) {
-        console.warn("Qdrant 校验缺失条目失败，回退到全局 Embedding:", e);
+        console.warn("Qdrant 校验缺失条目失败，回退到原生重置:", e);
+        throw e; // 这里不能吞掉报错，需要向上传递以便排查
       }
     }
 

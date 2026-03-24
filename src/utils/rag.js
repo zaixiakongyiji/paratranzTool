@@ -133,7 +133,7 @@ export const RAG = {
     const rawTopK = 15; // 初始多取一些，后面过滤用
     const results = await VectorStore.searchSimilar(projectId, queryVec, rawTopK, {
       fileId: options.fileId,
-      maxLenRatio: 3,
+      maxLenRatio: 20, // 放宽高低倍数过滤，允许极长段落作为短句的参考
       queryLen: original.length
     });
     
