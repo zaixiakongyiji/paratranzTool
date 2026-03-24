@@ -54,16 +54,20 @@ export const VectorStore = {
    */
   async upsertItems(projectId, items) {
     const db = await openDB();
+    
+    // 方案：先读取出该项目的所有旧数据，记录下它们的 embedding 以供“合并/回填”
+    // 这样在后面的写入事务中就全是同步操作，不会因为 await 导致事务自动提交
+    const existingMap = new Map();
+    const existingItems = await this.getItemsWithEmbedding(projectId);
+    existingItems.forEach(item => existingMap.set(item.id, item));
+    const leftovers = await this.getItemsWithoutEmbedding(projectId);
+    leftovers.forEach(item => existingMap.set(item.id, item));
+
     const tx = db.transaction(STORE_NAME, 'readwrite');
     const store = tx.objectStore(STORE_NAME);
     
     for (const item of items) {
-      // 先尝试读取已有条目，保留其 embedding
-      const existing = await new Promise(resolve => {
-        const req = store.get(item.id);
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => resolve(null);
-      });
+      const existing = existingMap.get(item.id);
       
       store.put({
         id: item.id,
@@ -77,7 +81,7 @@ export const VectorStore = {
         // 保留已有向量，或标记无向量
         embedding: existing?.embedding || null,
         embeddingModel: existing?.embeddingModel || null,
-        hasEmbedding: existing?.embedding ? 1 : 0
+        hasEmbedding: existing?.hasEmbedding || 0
       });
     }
     
@@ -90,19 +94,20 @@ export const VectorStore = {
   async setEmbedding(id, embedding, modelName) {
     const settings = Storage.getSettings();
     const db = await openDB();
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
     
+    // 1. 先从数据库读出完整条目（为了 Payload 的元数据）
     const item = await new Promise((resolve, reject) => {
-      const req = store.get(id);
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const req = tx.objectStore(STORE_NAME).get(id);
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     });
     
     if (!item) return;
-    
+
+    // 2. 如果开启了 Qdrant，先执行网络请求（这一步耗时，不能在事务里做）
+    let hasUploadedToQdrant = false;
     if (settings.qdrantEnabled && settings.qdrantUrl) {
-      // 写入 Qdrant 服务端
       try {
         const { QdrantClient } = await import('../api/qdrant.js');
         await QdrantClient.upsertPoints(settings.qdrantUrl, settings.qdrantApiKey, [{
@@ -117,24 +122,25 @@ export const VectorStore = {
             stage: item.stage
           }
         }]);
-        // IndexedDB 不再存储庞大的 embedding 数组对象本身，释放内存
-        item.embedding = null;
+        hasUploadedToQdrant = true;
       } catch (e) {
         console.error("Qdrant 写入失败:", e);
         throw e;
       }
-    } else {
-      // 原生 IndexedDB 写入向量
-      item.embedding = Array.from(embedding);
     }
+
+    // 3. 最后开启一个简短的写事务，更新本地状态
+    const txWrite = db.transaction(STORE_NAME, 'readwrite');
+    const storeWrite = txWrite.objectStore(STORE_NAME);
     
+    item.embedding = hasUploadedToQdrant ? null : Array.from(embedding);
     item.embeddingModel = modelName;
     item.hasEmbedding = 1;
-    store.put(item);
+    storeWrite.put(item);
     
     await new Promise((resolve, reject) => {
-      tx.oncomplete = resolve;
-      tx.onerror = () => reject(tx.error);
+      txWrite.oncomplete = resolve;
+      txWrite.onerror = () => reject(txWrite.error);
     });
   },
 
