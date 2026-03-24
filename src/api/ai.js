@@ -22,7 +22,13 @@ export const AIClient = {
       }));
     } else {
       // OpenAI 兼容格式
-      const url = `${base}/models`;
+      // 容错：如果用户填写的 URL 包含了 /embeddings 或 /rerank，获取模型列表时需要去掉它们
+      let cleanBase = base;
+      if (cleanBase.endsWith('/embeddings')) cleanBase = cleanBase.slice(0, -11);
+      if (cleanBase.endsWith('/rerank')) cleanBase = cleanBase.slice(0, -7);
+      if (cleanBase.endsWith('/')) cleanBase = cleanBase.slice(0, -1);
+
+      const url = `${cleanBase}/models`;
       const response = await fetch(url, {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${apiKey}` }
@@ -36,7 +42,7 @@ export const AIClient = {
     }
   },
 
-  async translateSingle({ original, terms = [], systemPrompt, suggestion }) {
+  async translateSingle({ original, terms = [], systemPrompt, suggestion, references }) {
     const settings = Storage.getSettings();
     if (!settings.aiApiKey) throw new Error('未配置 AI API Key，请前往设置页修改。');
 
@@ -49,7 +55,14 @@ export const AIClient = {
         terms.map(t => `- "${t.term}" 翻译为 "${t.translation}"`).join("\n");
     }
 
-    const finalSystemPrompt = (systemPrompt || settings.aiPrompt || "你是一个专业翻译。") + termContext;
+    // RAG 参考上下文
+    let refContext = '';
+    if (references && references.length > 0) {
+      refContext = '\n\n以下是该项目中相似内容的历史翻译参考，请保持风格一致：\n' +
+        references.map((ref, i) => `${i + 1}. "${ref.original.substring(0, 150)}" → "${ref.translation.substring(0, 150)}"`).join('\n');
+    }
+
+    const finalSystemPrompt = (systemPrompt || settings.aiPrompt || "你是一个专业翻译。") + termContext + refContext;
     const suggestionText = suggestion ? `\n\n用户对这句原文的翻译提出了特别的修改建议/要求，请在这次重新翻译中严格遵循：\n【用户建议】：${suggestion}` : '';
     
     const userPrompt = `请将以下文本翻译成中文，提供4种不同风格的翻译版本。每一版翻译的结果必须直接用中文方括号【】包裹。
@@ -87,7 +100,13 @@ export const AIClient = {
           throw new Error('Gemini API 响应解析失败');
         }
       } else {
-        const url = `${baseUrl}/chat/completions`;
+        // 容错：处理可能包含的路径后缀
+        let cleanBase = baseUrl;
+        if (cleanBase.endsWith('/embeddings')) cleanBase = cleanBase.slice(0, -11);
+        if (cleanBase.endsWith('/rerank')) cleanBase = cleanBase.slice(0, -7);
+        if (cleanBase.endsWith('/')) cleanBase = cleanBase.slice(0, -1);
+
+        const url = `${cleanBase}/chat/completions`;
         const messages = [
           { role: "system", content: finalSystemPrompt },
           { role: "user", content: userPrompt }

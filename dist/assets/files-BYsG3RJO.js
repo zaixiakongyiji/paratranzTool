@@ -1,4 +1,4 @@
-import{paraTranzApi as x}from"./paratranz-BehdmDyJ.js";import{n as p}from"./index-C_T7Xp4D.js";import"./storage-BQ5PE7ds.js";async function D(n,m){const d=m.get("projectId");if(!d){n.innerHTML='<div class="glass-panel">缺少项目 ID 参数。</div>';return}n.innerHTML='<div style="text-align:center; padding: 2rem;">加载文件列表中...</div>';try{let v=function(){const e=l.filter(t=>t.isDone).length,i=l.length-e;n.innerHTML=`
+import{paraTranzApi as x}from"./paratranz-DQKCRvjE.js";import{n as p}from"./index-DCt6G-sU.js";import"./storage-D0vRnQMA.js";async function D(n,m){const d=m.get("projectId");if(!d){n.innerHTML='<div class="glass-panel">缺少项目 ID 参数。</div>';return}n.innerHTML='<div style="text-align:center; padding: 2rem;">加载文件列表中...</div>';try{let v=function(){const e=l.filter(t=>t.isDone).length,i=l.length-e;n.innerHTML=`
         <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
           <h2>文件列表 (Project ID: ${d})</h2>
           <button id="btn-back" class="btn">返回项目列表</button>

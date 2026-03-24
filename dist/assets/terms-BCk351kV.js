@@ -1,4 +1,4 @@
-import{paraTranzApi as i}from"./paratranz-BehdmDyJ.js";import"./storage-BQ5PE7ds.js";async function p(t,n){const r=n.get("projectId");if(!r){t.innerHTML='<div class="glass-panel">要求指定 projectId 参数方可获取术语。</div>';return}t.innerHTML='<div style="text-align:center; padding: 2rem;">加载术语表中...</div>';try{const e=await i.getTerms(r),l=Array.isArray(e)?e:e.results||[];if(l.length===0){t.innerHTML='<div class="glass-panel">当前项目暂无术语</div>';return}const d=l.map(a=>`
+import{paraTranzApi as i}from"./paratranz-DQKCRvjE.js";import"./storage-D0vRnQMA.js";async function p(t,n){const r=n.get("projectId");if(!r){t.innerHTML='<div class="glass-panel">要求指定 projectId 参数方可获取术语。</div>';return}t.innerHTML='<div style="text-align:center; padding: 2rem;">加载术语表中...</div>';try{const e=await i.getTerms(r),l=Array.isArray(e)?e:e.results||[];if(l.length===0){t.innerHTML='<div class="glass-panel">当前项目暂无术语</div>';return}const d=l.map(a=>`
         <tr style="border-bottom: 1px solid var(--border-color);">
           <td style="padding: 0.8rem;">${s(a.term)}</td>
           <td style="padding: 0.8rem;">${s(a.translation)}</td>

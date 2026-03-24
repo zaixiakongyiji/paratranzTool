@@ -41,6 +41,7 @@ export async function render(container, query) {
 function renderWorkbench(container, projectId, fileId, strings, terms, currentStage) {
   let currentIndex = -1;
   let sortOrder = 'none'; // 'none', 'asc', 'desc'
+  let currentReferences = []; // RAG 检索到的参考翻译
 
   function renderPage() {
     container.innerHTML = `
@@ -49,6 +50,7 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
           <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
             <h3 style="margin: 0;">词条列表</h3>
             <div style="display: flex; gap: 0.3rem;">
+              <button id="btn-sync-rag" class="btn btn-sm" title="同步语料库"><i class="fas fa-sync-alt"></i></button>
               <button id="btn-sort" class="btn btn-sm" title="按更新时间排序">
                 <i class="fas fa-sort"></i> ${sortOrder === 'none' ? '' : (sortOrder === 'asc' ? '↑' : '↓')}
               </button>
@@ -108,6 +110,14 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
                 <label style="font-size: 0.7rem; color: var(--text-secondary); margin-bottom: 0.3rem; display: block;">上一轮候选:</label>
                 <div id="ai-prev-items" style="display: flex; flex-direction: column; gap: 0.3rem;"></div>
               </div>
+            </div>
+
+            <div id="rag-ref-panel" style="display: none; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.8rem; background: var(--bg-surface); margin-bottom: 0.5rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <label style="color: var(--accent-color); font-size: 0.85rem; font-weight: 600;"><i class="fas fa-project-diagram"></i> RAG 参考翻译</label>
+                <button id="btn-close-rag" style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1rem;">&times;</button>
+              </div>
+              <div id="rag-ref-list" style="display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.85rem; max-height: 150px; overflow-y: auto;"></div>
             </div>
 
             <div style="flex: 1; display: flex; flex-direction: column;">
@@ -181,6 +191,32 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
       });
     });
 
+    // RAG 语料库同步按钮
+    document.getElementById('btn-sync-rag').addEventListener('click', async () => {
+      const settings = Storage.getSettings();
+      if (!settings.embeddingEnabled) {
+        showToast('请先在设置页开启向量化模型并配置 API', 'warning');
+        return;
+      }
+      
+      const btn = document.getElementById('btn-sync-rag');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+      
+      try {
+        const { RAG } = await import('../utils/rag.js');
+        await RAG.syncCorpus(projectId, (status, detail) => {
+          showToast(detail, 'info');
+        });
+        showToast('语料库同步完成！', 'success');
+      } catch (e) {
+        showToast('同步失败: ' + e.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-sync-alt"></i>';
+      }
+    });
+
     initWorkbenchLogic();
   }
 
@@ -219,6 +255,37 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
     const suggestInput = document.getElementById('input-ai-suggest');
     if (suggestPanel) suggestPanel.style.display = 'none';
     if (suggestInput) suggestInput.value = '';
+
+    // 重置 RAG 参考面板
+    currentReferences = [];
+    const ragPanel = document.getElementById('rag-ref-panel');
+    if (ragPanel) ragPanel.style.display = 'none';
+
+    // 异步触发 RAG 检索（不阻塞主 UI）
+    const settings = Storage.getSettings();
+    if (settings.embeddingEnabled && str.original) {
+      import('../utils/rag.js').then(async ({ RAG }) => {
+        try {
+          const refs = await RAG.retrieveReferences(projectId, str.original, { fileId });
+          // 确保用户没有切换到其他词条
+          if (currentIndex === index && refs.length > 0) {
+            currentReferences = refs;
+            const ragList = document.getElementById('rag-ref-list');
+            const ragPanel = document.getElementById('rag-ref-panel');
+            ragList.innerHTML = refs.map((ref, i) =>
+              `<div style="padding: 0.4rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-color);">
+                <div style="color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 0.2rem;">相似度: ${(ref.score * 100).toFixed(1)}% | ${ref.fileName}</div>
+                <div style="font-size: 0.8rem;"><strong>原:</strong> ${ref.original.substring(0, 80)}...</div>
+                <div style="font-size: 0.8rem; color: var(--success-color);"><strong>译:</strong> ${ref.translation.substring(0, 80)}...</div>
+              </div>`
+            ).join('');
+            ragPanel.style.display = 'block';
+          }
+        } catch (e) {
+          console.warn('RAG 检索失败:', e);
+        }
+      });
+    }
 
     // 已审核防误触保护
     const isReviewed = str.stage === 2;
@@ -343,6 +410,11 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
       panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
     });
 
+    // 关闭 RAG 参考面板
+    document.getElementById('btn-close-rag').addEventListener('click', () => {
+      document.getElementById('rag-ref-panel').style.display = 'none';
+    });
+
     async function doAiTranslate(suggestion = null) {
       if (currentIndex === -1) return;
       const str = strings[currentIndex];
@@ -357,7 +429,7 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
       const textTranslation = document.getElementById('text-translation');
       
       try {
-        const result = await AIClient.translateSingle({ original: str.original, terms: terms, suggestion });
+        const result = await AIClient.translateSingle({ original: str.original, terms: terms, suggestion, references: currentReferences });
         
         let candidates = [];
         // 正则提取所有被【】包裹的内容，支持跨行提取 (s flag)
