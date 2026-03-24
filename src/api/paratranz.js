@@ -2,7 +2,7 @@ import { Storage } from '../utils/storage.js';
 
 class ParaTranzClient {
   constructor() {
-    this.baseUrl = '/api';
+    this.baseUrl = 'https://paratranz.cn/api';
   }
 
   getHeaders() {

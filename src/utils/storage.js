@@ -20,6 +20,11 @@ export const Storage = {
         embeddingApiKey: '',
         embeddingModel: 'Qwen/Qwen3-Embedding-8B',
         embeddingRefCount: 3,     // 注入参考条数
+        
+        // --- 存储介质设置 ---
+        qdrantEnabled: false,
+        qdrantUrl: 'http://localhost:6333',
+        qdrantApiKey: '',
 
         // --- RAG: 过滤模型（可选） ---
         filterEnabled: false,
@@ -48,7 +53,7 @@ export const Storage = {
       // 特殊处理：如果本地存的是空值（由于之前未配置过或保存过空表单），则回退到默认地址和模型
       const fieldsToCheck = [
         'aiBaseUrl', 'embeddingBaseUrl', 'filterBaseUrl', 'rerankBaseUrl',
-        'embeddingModel', 'filterModel', 'rerankModel'
+        'embeddingModel', 'filterModel', 'rerankModel', 'qdrantUrl'
       ];
       fieldsToCheck.forEach(key => {
         if (!merged[key] || merged[key].trim() === '') {

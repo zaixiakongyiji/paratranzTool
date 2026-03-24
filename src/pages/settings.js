@@ -113,6 +113,37 @@ export function render(container) {
       <!-- 重排序模型 -->
       ${renderModelPanel('rerank', '重排序模型', 'fas fa-sort-amount-down', s, 'rerank', { isOptional: true })}
 
+      <!-- 数据库存储介质配置 -->
+      <div style="margin-top: 2rem; margin-bottom: 0.8rem;">
+        <h2 style="margin: 0; font-size: 1.2rem;">🗄️ 向量数据库存储介质</h2>
+        <p style="margin: 0; font-size: 0.85rem; color: var(--text-secondary);">IndexedDB 存在本地浏览器（适合轻量使用），Qdrant 为专业外置服务（适合团队或重度使用）。</p>
+      </div>
+      <div class="glass-panel" style="padding: 1rem; border-radius: 8px; margin-bottom: 2rem; border-left: 4px solid var(--accent-color);">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-weight: 600;">启用 Qdrant 专业版引擎</div>
+            <div style="font-size: 0.85rem; color: var(--text-secondary);">开启后每次检索与语料同步均采用 Payload 与 projectId 严格隔离的方式存入 Qdrant</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="chk-qdrant-enabled" ${s.qdrantEnabled ? 'checked' : ''} />
+            <span class="slider"></span>
+          </label>
+        </div>
+        
+        <div id="panel-qdrant" style="display: ${s.qdrantEnabled ? 'block' : 'none'}; border-top: 1px solid var(--border-color); padding-top: 1rem; margin-top: 1rem;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+              <label style="display: block; margin-bottom: 0.3rem; color: var(--text-secondary); font-size: 0.85rem;">Qdrant API URL</label>
+              <input type="text" id="inp-qdrant-url" placeholder="如 http://localhost:6333" value="${s.qdrantUrl || 'http://localhost:6333'}" style="width: 100%;" />
+            </div>
+            <div>
+              <label style="display: block; margin-bottom: 0.3rem; color: var(--text-secondary); font-size: 0.85rem;">Qdrant API Key (无须鉴权留空)</label>
+              <input type="password" id="inp-qdrant-key" placeholder="API Key" value="${s.qdrantApiKey || ''}" style="width: 100%;" />
+            </div>
+          </div>
+        </div>
+      </div>
+
       <button id="btn-save-settings" class="btn btn-primary" style="width: 100%; margin-top: 0.5rem;">保存所有设置</button>
       <div id="save-msg" style="margin-top: 1rem; color: var(--success-color); display: none; text-align: center;">已保存！</div>
     </div>
@@ -144,6 +175,14 @@ export function render(container) {
       });
     }
   });
+
+  // --- Qdrant 开关联动 ---
+  const chkQdrant = document.getElementById('chk-qdrant-enabled');
+  if (chkQdrant) {
+    chkQdrant.addEventListener('change', () => {
+      document.getElementById('panel-qdrant').style.display = chkQdrant.checked ? 'block' : 'none';
+    });
+  }
 
   // --- 保存逻辑 ---
   document.getElementById('btn-save-settings').addEventListener('click', async () => {
@@ -185,36 +224,27 @@ export function render(container) {
       rerankApiFormat: document.getElementById('sel-rerank-format').value,
       rerankBaseUrl: document.getElementById('inp-rerank-url').value.trim(),
       rerankApiKey: document.getElementById('inp-rerank-key').value.trim(),
-      rerankModel: document.getElementById('inp-rerank-model').value.trim()
+      rerankModel: document.getElementById('inp-rerank-model').value.trim(),
+
+      // Qdrant 存储介质
+      qdrantEnabled: document.getElementById('chk-qdrant-enabled')?.checked || false,
+      qdrantUrl: document.getElementById('inp-qdrant-url')?.value.trim() || '',
+      qdrantApiKey: document.getElementById('inp-qdrant-key')?.value.trim() || ''
     };
 
     Storage.saveSettings(newSettings);
 
-    try {
-      // 验证 ParaTranz Token
-      if (newSettings.ptToken) {
-        const { paraTranzApi } = await import('../api/paratranz.js');
-        const profile = await paraTranzApi.getProfile();
-        if (profile) {
-          newSettings.ptUsername = profile.username || profile.name || '';
-          newSettings.ptEmail = profile.email || '';
-          Storage.saveSettings(newSettings);
-        }
-      }
+    const msg = document.getElementById('save-msg');
+    msg.style.display = 'block';
+    
+    setTimeout(async () => {
+      msg.style.display = 'none';
+      const { navigate } = await import('../router.js');
+      navigate('/settings');
+    }, 1000);
 
-      const msg = document.getElementById('save-msg');
-      msg.style.display = 'block';
-      setTimeout(async () => {
-        msg.style.display = 'none';
-        const { navigate } = await import('../router.js');
-        navigate('/settings');
-      }, 1000);
-    } catch (e) {
-      alert("配置已保存，但验证 Token 时出错: " + e.message);
-    } finally {
-      btn.disabled = false;
-      btn.innerText = '保存所有设置';
-    }
+    btn.disabled = false;
+    btn.innerText = '保存所有设置';
   });
 
   // --- 通用获取模型列表逻辑（所有面板共用） ---

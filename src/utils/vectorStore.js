@@ -1,5 +1,6 @@
 // IndexedDB 向量存储封装
 // 用于存储和检索已翻译词条的 Embedding 向量
+import { Storage } from './storage.js';
 
 const DB_NAME = 'paratranz_vector_store';
 const DB_VERSION = 1;
@@ -86,13 +87,8 @@ export const VectorStore = {
     });
   },
 
-  /**
-   * 为指定条目写入向量
-   * @param {number} id - 条目 ID
-   * @param {Float32Array|number[]} embedding - 向量
-   * @param {string} modelName - 生成向量使用的模型名
-   */
   async setEmbedding(id, embedding, modelName) {
+    const settings = Storage.getSettings();
     const db = await openDB();
     const tx = db.transaction(STORE_NAME, 'readwrite');
     const store = tx.objectStore(STORE_NAME);
@@ -105,7 +101,33 @@ export const VectorStore = {
     
     if (!item) return;
     
-    item.embedding = Array.from(embedding);
+    if (settings.qdrantEnabled && settings.qdrantUrl) {
+      // 写入 Qdrant 服务端
+      try {
+        const { QdrantClient } = await import('../api/qdrant.js');
+        await QdrantClient.upsertPoints(settings.qdrantUrl, settings.qdrantApiKey, [{
+          id: item.id,
+          vector: Array.from(embedding),
+          payload: {
+            projectId: item.projectId,
+            fileId: item.fileId,
+            fileName: item.fileName,
+            original: item.original,
+            translation: item.translation,
+            stage: item.stage
+          }
+        }]);
+        // IndexedDB 不再存储庞大的 embedding 数组对象本身，释放内存
+        item.embedding = null;
+      } catch (e) {
+        console.error("Qdrant 写入失败:", e);
+        throw e;
+      }
+    } else {
+      // 原生 IndexedDB 写入向量
+      item.embedding = Array.from(embedding);
+    }
+    
     item.embeddingModel = modelName;
     item.hasEmbedding = 1;
     store.put(item);
@@ -116,20 +138,60 @@ export const VectorStore = {
     });
   },
 
-  /**
-   * 获取项目中所有尚未向量化的条目
-   */
   async getItemsWithoutEmbedding(projectId) {
+    const settings = Storage.getSettings();
     const db = await openDB();
     const tx = db.transaction(STORE_NAME, 'readonly');
     const store = tx.objectStore(STORE_NAME);
     const index = store.index('by_has_embedding');
     
-    return new Promise((resolve, reject) => {
+    const items = await new Promise((resolve, reject) => {
       const request = index.getAll([String(projectId), 0]);
       request.onsuccess = () => resolve(request.result || []);
       request.onerror = () => reject(request.error);
     });
+
+    if (items.length === 0) return [];
+
+    // 若启用 Qdrant，去服务端验证是否真的缺失（可能换电脑后本地 DB 空，但服务端已有）
+    if (settings.qdrantEnabled && settings.qdrantUrl) {
+      try {
+        const { QdrantClient } = await import('../api/qdrant.js');
+        // 分批查询防止 Request URI 过大（按 1000 批）
+        let existingIds = new Set();
+        const batchSize = 1000;
+        for (let i = 0; i < items.length; i += batchSize) {
+          const batchIds = items.slice(i, i + batchSize).map(item => item.id);
+          const found = await QdrantClient.getExistingIds(settings.qdrantUrl, settings.qdrantApiKey, batchIds);
+          found.forEach(id => existingIds.add(id));
+        }
+        
+        const missing = [];
+        
+        // 同步状态到本地 IndexedDB（把已上传的回填为 hasEmbedding=1）
+        if (existingIds.size > 0) {
+          const dbWrite = await openDB();
+          const txWrite = dbWrite.transaction(STORE_NAME, 'readwrite');
+          const storeWrite = txWrite.objectStore(STORE_NAME);
+
+          for (const item of items) {
+            if (existingIds.has(item.id)) {
+              item.hasEmbedding = 1;
+              item.embedding = null; 
+              storeWrite.put(item);
+            } else {
+              missing.push(item);
+            }
+          }
+          await new Promise((res) => { txWrite.oncomplete = res; });
+          return missing;
+        }
+      } catch (e) {
+        console.warn("Qdrant 校验缺失条目失败，回退到全局 Embedding:", e);
+      }
+    }
+
+    return items;
   },
 
   /**
@@ -163,15 +225,46 @@ export const VectorStore = {
     });
   },
 
-  /**
-   * 余弦相似度检索 Top-K
-   * @param {string} projectId - 项目 ID
-   * @param {number[]} queryVec - 查询向量
-   * @param {number} topK - 返回条目数
-   * @param {object} filters - 可选过滤 { fileId, minStage, maxLenRatio }
-   * @returns {Array<{ item, score }>}
-   */
   async searchSimilar(projectId, queryVec, topK = 15, filters = {}) {
+    const settings = Storage.getSettings();
+
+    // =============== Qdrant 检索模式 ===============
+    if (settings.qdrantEnabled && settings.qdrantUrl) {
+      try {
+        const { QdrantClient } = await import('../api/qdrant.js');
+        const results = await QdrantClient.search(settings.qdrantUrl, settings.qdrantApiKey, projectId, queryVec, topK * 2);
+        
+        let scored = results.map(r => ({
+          item: r.payload,
+          score: r.score
+        }));
+        
+        // Qdrant 检索回来的结果，在前端再执行一次相同的规则微调过滤
+        if (filters.fileId) {
+          scored = scored.map(s => ({
+            ...s,
+            score: s.item.fileId === filters.fileId ? s.score * 1.2 : s.score
+          }));
+        }
+        if (filters.minStage) {
+          scored = scored.filter(s => s.item.stage >= filters.minStage);
+        }
+        if (filters.maxLenRatio && filters.queryLen) {
+          scored = scored.filter(s => {
+            const ratio = s.item.original.length / filters.queryLen;
+            return ratio >= (1 / filters.maxLenRatio) && ratio <= filters.maxLenRatio;
+          });
+        }
+        
+        scored.sort((a, b) => b.score - a.score);
+        return scored.slice(0, topK);
+      } catch (e) {
+        console.error("Qdrant 检索失败:", e);
+        return [];
+      }
+    }
+
+    // =============== 原生 IndexedDB 检索模式 ===============
     const items = await this.getItemsWithEmbedding(projectId);
     if (items.length === 0) return [];
     
