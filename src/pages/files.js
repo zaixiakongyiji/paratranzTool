@@ -67,9 +67,9 @@ export async function render(container, query) {
 
     function renderPage() {
       container.innerHTML = `
-        <div style="display: flex; gap: 1.5rem; align-items: flex-start;">
+        <div style="max-width: 1000px; margin: 0 auto; display: flex; gap: 1.5rem; align-items: flex-start;">
           <!-- 左侧 TODO 侧边栏 (固定宽度，跟随滚动) -->
-          <div class="glass-panel" style="width: 200px; flex-shrink: 0; display: flex; flex-direction: column; gap: 0.8rem; padding: 1rem; position: sticky; top: 0;">
+          <div class="glass-panel" style="width: 180px; flex-shrink: 0; display: flex; flex-direction: column; gap: 0.8rem; padding: 1rem; position: sticky; top: 1rem;">
             <div style="font-weight: 600; color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 0.5rem;">TODO 概览</div>
             <div class="nav-item active" style="padding: 0.6rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.6rem; background: var(--accent-color); color: white;">
               <i class="fas fa-file-alt"></i> 文件列表
@@ -88,7 +88,7 @@ export async function render(container, query) {
           <!-- 右侧主内容 (主容器自然滚动) -->
           <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
             <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; flex-shrink: 0;">
-              <h2 style="font-size: 1.2rem; margin: 0;">文件管理 (ID: ${projectId})</h2>
+              <h2 style="font-size: 1.1rem; margin: 0;">文件管理 (ID: ${projectId})</h2>
               <div style="display: flex; gap: 0.5rem;">
                 <button id="btn-sync-rag" class="btn btn-sm" title="同步语料库"><i class="fas fa-sync-alt"></i> 同步</button>
                 <button id="btn-clear-rag" class="btn btn-sm" style="color: var(--danger-color); border-color: var(--danger-color);" title="清空语料库"><i class="fas fa-trash-alt"></i> 清空</button>
@@ -96,13 +96,13 @@ export async function render(container, query) {
             </div>
 
             <!-- 筛选栏 -->
-            <div style="display: flex; gap: 0.5rem; margin-bottom: 1.2rem; flex-shrink: 0;">
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-shrink: 0;">
               <button class="btn btn-sm filter-btn ${currentFilter === 'all' ? 'btn-primary' : ''}" data-filter="all">全部</button>
               <button class="btn btn-sm filter-btn ${currentFilter === 'todo' ? 'btn-primary' : ''}" data-filter="todo">待处理</button>
               <button class="btn btn-sm filter-btn ${currentFilter === 'done' ? 'btn-primary' : ''}" data-filter="done">已完成</button>
             </div>
 
-            <div id="file-list-content" style="display: flex; flex-direction: column; gap: 0.8rem; padding-bottom: 2rem;">
+            <div id="file-list-content" style="display: flex; flex-direction: column; gap: 0.6rem; padding-bottom: 2rem;">
               ${groups.map((g, gi) => {
                 const filteredFiles = g.files.filter(f => {
                   if (currentFilter === 'done') return f.isDone;
@@ -112,31 +112,31 @@ export async function render(container, query) {
                 if (filteredFiles.length === 0) return '';
                 
                 return `
-                <div class="folder-group glass-panel" style="padding: 0; border: 1px solid var(--border-color); overflow: hidden;">
-                  <div class="folder-header" style="padding: 0.8rem 1rem; cursor: pointer; display: flex; align-items: center; background: rgba(255,255,255,0.03); hover: background: rgba(255,255,255,0.05);">
-                    <i class="fas fa-chevron-right folder-arrow" style="margin-right: 0.8rem; transition: transform 0.2s; font-size: 0.8rem; color: var(--text-secondary); ${(currentFilter !== 'all') ? 'transform: rotate(90deg);' : ''}"></i>
-                    <div style="flex: 1; font-weight: 500;">${g.name} <span style="font-weight: normal; font-size: 0.8rem; color: var(--text-secondary); margin-left: 0.4rem;">${filteredFiles.length} 文件</span></div>
-                    <div style="display: flex; align-items: center; gap: 1rem;">
-                      <div class="mini-progress" style="width: 60px; height: 4px; background: var(--bg-color); border-radius: 2px; overflow: hidden;">
+                <div class="folder-group glass-panel" style="padding: 0; border: 1px solid var(--border-color); overflow: hidden; border-radius: 8px;">
+                  <div class="folder-header" style="padding: 0.6rem 1rem; cursor: pointer; display: flex; align-items: center; background: rgba(255,255,255,0.02); hover: background: rgba(255,255,255,0.04);">
+                    <i class="fas fa-chevron-right folder-arrow" style="margin-right: 0.6rem; transition: transform 0.2s; font-size: 0.75rem; color: var(--text-secondary); ${(currentFilter !== 'all') ? 'transform: rotate(90deg);' : ''}"></i>
+                    <div style="flex: 1; font-weight: 500; font-size: 0.9rem;">${g.name} <span style="font-weight: normal; font-size: 0.8rem; color: var(--text-secondary); margin-left: 0.4rem;">${filteredFiles.length}</span></div>
+                    <div style="display: flex; align-items: center; gap: 0.8rem;">
+                      <div class="mini-progress" style="width: 50px; height: 3px; background: var(--bg-color); border-radius: 2px; overflow: hidden;">
                         <div style="width: ${g.percent}%; height: 100%; background: var(--accent-color);"></div>
                       </div>
-                      <span style="font-size: 0.75rem; color: var(--text-secondary); min-width: 35px; text-align: right;">${g.percent}%</span>
+                      <span style="font-size: 0.75rem; color: var(--text-secondary); min-width: 30px; text-align: right;">${g.percent}%</span>
                     </div>
                   </div>
                   <!-- 面板内部独立滚动，并限制最大高度，防止撑开外层导致排版挤压 -->
-                  <div class="folder-content" style="display: ${(currentFilter !== 'all') ? 'block' : 'none'}; max-height: 500px; overflow-y: auto; border-top: 1px solid var(--border-color); background: rgba(0,0,0,0.1);">
+                  <div class="folder-content" style="display: ${(currentFilter !== 'all') ? 'block' : 'none'}; max-height: 400px; overflow-y: auto; border-top: 1px solid var(--border-color); background: rgba(0,0,0,0.05);">
                     ${filteredFiles.map(f => `
-                      <div class="file-row" data-id="${f.id}" style="padding: 0.6rem 1rem 0.6rem 2.8rem; border-bottom: 1px solid rgba(255,255,255,0.03); display: flex; align-items: center; cursor: pointer; position: relative;">
+                      <div class="file-row" data-id="${f.id}" style="padding: 0.5rem 1rem 0.5rem 2.4rem; border-bottom: 1px solid rgba(255,255,255,0.02); display: flex; align-items: center; cursor: pointer; position: relative;">
                         <div style="flex: 1; min-width: 0;">
-                          <div style="font-size: 0.85rem; display: flex; align-items: center; gap: 0.5rem;">
-                            <i class="far fa-file-code" style="color: var(--text-secondary);"></i>
+                          <div style="font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem;">
+                            <i class="far fa-file-code" style="color: var(--text-secondary); font-size: 0.75rem;"></i>
                             <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${f.name.split('/').pop()}</span>
-                            ${f.isDone ? '<i class="fas fa-check-circle" style="color: var(--success-color); font-size: 0.8rem;"></i>' : ''}
+                            ${f.isDone ? '<i class="fas fa-check-circle" style="color: var(--success-color); font-size: 0.75rem;"></i>' : ''}
                           </div>
                         </div>
-                        <div style="display: flex; align-items: center; gap: 1rem; margin-left: 1.5rem; font-size: 0.75rem; color: var(--text-secondary);">
-                          <div style="min-width: 80px; text-align: right;">${f.translated}/${f.total}</div>
-                          <button class="btn btn-sm btn-action" style="padding: 2px 8px; font-size: 0.7rem;">${f.isDone ? '查看' : '翻译'}</button>
+                        <div style="display: flex; align-items: center; gap: 0.8rem; margin-left: 1rem; font-size: 0.75rem; color: var(--text-secondary);">
+                          <div style="min-width: 70px; text-align: right;">${f.translated}/${f.total}</div>
+                          <button class="btn btn-sm btn-action" style="padding: 1px 6px; font-size: 0.7rem; min-width: 44px;">${f.isDone ? '查看' : '翻译'}</button>
                         </div>
                       </div>
                     `).join('')}
@@ -147,6 +147,7 @@ export async function render(container, query) {
           </div>
         </div>
       `;
+
 
 
       document.getElementById('btn-back').addEventListener('click', () => {

@@ -10,15 +10,17 @@ export async function render(container) {
 
 function renderLayout(container) {
   container.innerHTML = `
-    <div style="margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center;">
-      <h2>我的项目</h2>
-      <div style="display: flex; gap: 0.5rem;">
-        <input type="number" id="input-add-project-id" placeholder="输入项目 ID (如 1234)" style="width: 200px;" />
-        <button id="btn-add-project" class="btn btn-primary">添加项目</button>
+    <div style="max-width: 1000px; margin: 0 auto;">
+      <div style="margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center;">
+        <h2 style="font-size: 1.25rem;">我的项目</h2>
+        <div style="display: flex; gap: 0.5rem;">
+          <input type="number" id="input-add-project-id" placeholder="项目 ID" style="width: 140px; font-size: 0.9rem;" />
+          <button id="btn-add-project" class="btn btn-primary btn-sm">添加项目</button>
+        </div>
       </div>
-    </div>
-    <div id="project-list-container" class="projects-grid">
-      <div style="text-align:center; padding: 2rem; color: var(--text-secondary);">加载中...</div>
+      <div id="project-list-container" class="projects-grid">
+        <div style="text-align:center; padding: 2rem; color: var(--text-secondary);">加载中...</div>
+      </div>
     </div>
   `;
 
