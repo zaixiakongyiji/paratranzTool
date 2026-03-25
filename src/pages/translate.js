@@ -25,15 +25,29 @@ export async function render(container, query) {
     
     // 合并术语，本地知识库优先
     const termsMap = new Map();
-    ptTerms.forEach(t => termsMap.set(t.term, t.translation));
-    localTerms.forEach(t => termsMap.set(t.term, t.translation));
+    ptTerms.forEach(t => termsMap.set(t.term, t));
+    localTerms.forEach(t => termsMap.set(t.term, Object.assign({}, termsMap.get(t.term), t)));
     
-    const terms = Array.from(termsMap.entries()).map(([term, translation]) => ({ term, translation }));
+    // 转换为对象数组，并提取需要的字段
+    const terms = Array.from(termsMap.values()).map(t => ({ 
+      term: t.term, 
+      translation: t.translation,
+      caseSensitive: t.caseSensitive || false,
+      variants: Array.isArray(t.variants) ? t.variants : (t.variants ? String(t.variants).split(/[|,\n]+/).map(s=>s.trim()).filter(Boolean) : [])
+    }));
 
     strings = strings || [];
-
+    
+    // 进入工作台，禁用全局滚动，启用三列独立布局
+    document.body.style.overflow = 'hidden';
+    const appCont = document.querySelector('.app-container');
+    if (appCont) appCont.style.height = '100vh';
+    
     renderWorkbench(container, projectId, fileId, strings, terms, currentStage);
   } catch (error) {
+    document.body.style.overflow = '';
+    const appCont = document.querySelector('.app-container');
+    if (appCont) appCont.style.height = '';
     container.innerHTML = `<div class="glass-panel" style="color: var(--danger-color)">初始化失败 ${error.message}</div>`;
   }
 }
@@ -45,15 +59,15 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
 
   function renderPage() {
     container.innerHTML = `
-      <div style="display: flex; height: calc(100vh - 120px); gap: 1.5rem;">
-        <div class="glass-panel" style="width: 320px; display: flex; flex-direction: column;">
+      <div style="display: flex; flex: 1; min-height: 0; gap: 1.2rem; width: 100%;">
+        <!-- 左侧：词条列表 -->
+        <div class="glass-panel" style="width: 300px; flex-shrink: 0; display: flex; flex-direction: column; min-width: 0;">
           <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
-            <h3 style="margin: 0;">词条列表</h3>
+            <h3 style="margin: 0; font-size: 1.1rem;">词条列表</h3>
             <div style="display: flex; gap: 0.3rem;">
               <button id="btn-sort" class="btn btn-sm" title="按更新时间排序">
                 <i class="fas fa-sort"></i> ${sortOrder === 'none' ? '' : (sortOrder === 'asc' ? '↑' : '↓')}
               </button>
-              <button id="btn-terms" class="btn btn-sm" title="查看术语表">📖</button>
               <button id="btn-back" class="btn btn-sm">返回</button>
             </div>
           </div>
@@ -67,23 +81,24 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
           <div id="string-list" style="flex: 1; overflow-y: auto; padding-right: 0.5rem;"></div>
         </div>
 
-        <div class="glass-panel" style="flex: 1; display: flex; flex-direction: column;">
-          <h3 style="margin-bottom: 1rem;">工作台</h3>
-          <div style="flex: 1; display: flex; flex-direction: column; gap: 1rem;">
-            <div style="flex: 1; display: flex; flex-direction: column;">
+        <!-- 中间：编辑器 (核心自适应区) -->
+        <div class="glass-panel" style="flex: 1; min-width: 0; display: flex; flex-direction: column; overflow-y: auto; padding-right: 0.8rem;">
+          <h3 style="margin-bottom: 1rem; font-size: 1.1rem; flex-shrink: 0;">工作台</h3>
+          <div style="display: flex; flex-direction: column; gap: 1rem; flex-shrink: 0; padding-bottom: 1rem;">
+            <div style="display: flex; flex-direction: column;">
               <label style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 0.5rem; display:block;">原文</label>
-              <div id="text-original" style="flex: 1; background: var(--bg-color); padding: 1rem; border-radius: 6px; border: 1px solid var(--border-color); overflow-y: auto; font-size: 1.1rem; line-height: 1.6; white-space: pre-wrap;"></div>
+              <div id="text-original" style="background: var(--bg-color); padding: 1rem; border-radius: 6px; border: 1px solid var(--border-color); font-size: 1.1rem; line-height: 1.6; white-space: pre-wrap;"></div>
             </div>
             
-            <div style="display: flex; gap: 0.8rem;">
-              <button id="btn-ai-translate" class="btn btn-primary" style="flex: 1"><i class="fas fa-robot"></i> AI 执行翻译</button>
-              <button id="btn-get-rag" class="btn" style="white-space: nowrap;" title="手动从本地语料库检索参考"><i class="fas fa-search"></i> 检索参考</button>
-              <button id="btn-tm-match" class="btn" style="white-space: nowrap;"><i class="fas fa-database"></i> 记忆库</button>
+            <div style="display: flex; gap: 0.6rem; flex-wrap: wrap; flex-shrink: 0;">
+              <button id="btn-ai-translate" class="btn btn-primary" style="flex: 1; min-width: 110px;"><i class="fas fa-robot"></i> AI 翻译</button>
+              <button id="btn-get-rag" class="btn" style="white-space: nowrap; flex: 0.5;" title="手动从本地语料库检索参考"><i class="fas fa-search"></i> 检索参考</button>
+              <button id="btn-tm-match" class="btn" style="white-space: nowrap; flex: 0.5;"><i class="fas fa-database"></i> 记忆库</button>
               <button id="btn-toggle-candidates" class="btn" style="padding: 0 0.8rem;" title="展开/收起 AI 候选面板"><i class="fas fa-layer-group"></i> 已有候选</button>
               <button id="btn-ai-suggest" class="btn" style="padding: 0 0.8rem;" title="提供修改建议重新生成"><i class="fas fa-comment-dots"></i> 修改建议</button>
             </div>
             
-            <div id="ai-suggest-panel" style="display: none; margin-top: 0.8rem; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.8rem; background: var(--bg-surface);">
+            <div id="ai-suggest-panel" style="display: none; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.8rem; background: var(--bg-surface); flex-shrink: 0;">
               <label style="color: var(--text-secondary); font-size: 0.85rem; font-weight: 600; display: block; margin-bottom: 0.5rem;">给 AI 提供修改建议</label>
               <div style="display: flex; gap: 0.5rem;">
                 <input type="text" id="input-ai-suggest" style="flex: 1; padding: 0.5rem; font-size: 0.9rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-color); color: var(--text-color);" placeholder="输入希望调整的方向或注意点..." />
@@ -91,8 +106,8 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
               </div>
             </div>
 
-            <div id="ai-candidates-panel" style="display: none; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.8rem; background: var(--bg-color);">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <div id="ai-candidates-panel" style="display: none; flex-direction: column; max-height: 35vh; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.8rem; background: var(--bg-color); flex-shrink: 0;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-shrink: 0;">
                 <div style="display: flex; align-items: center; gap: 0.5rem;">
                   <label style="color: var(--accent-color); font-size: 0.85rem; font-weight: 600;">AI 候选译文</label>
                   <div style="display: inline-flex; border: 1px solid var(--border-color); border-radius: 4px; overflow: hidden; font-size: 0.75rem;">
@@ -105,36 +120,77 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
                   <button id="btn-close-candidates" style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1rem;">&times;</button>
                 </div>
               </div>
-              <div id="ai-candidates-list" style="display: flex; flex-direction: column; gap: 0.5rem;"></div>
-              <div id="ai-prev-list" style="display: none; margin-top: 0.8rem; border-top: 1px dashed var(--border-color); padding-top: 0.5rem;">
+              <div id="ai-candidates-list" style="display: flex; flex-direction: column; gap: 0.5rem; overflow-y: auto; flex: 1; padding-right: 0.3rem;"></div>
+              <div id="ai-prev-list" style="display: none; flex-direction: column; margin-top: 0.8rem; border-top: 1px dashed var(--border-color); padding-top: 0.5rem; flex-shrink: 0; max-height: 30%; overflow-y: auto;">
                 <label style="font-size: 0.7rem; color: var(--text-secondary); margin-bottom: 0.3rem; display: block;">上一轮候选:</label>
                 <div id="ai-prev-items" style="display: flex; flex-direction: column; gap: 0.3rem;"></div>
               </div>
             </div>
 
-            <div id="rag-ref-panel" style="display: none; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.8rem; background: var(--bg-surface); margin-bottom: 0.5rem;">
+            <div id="rag-ref-panel" style="display: none; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.8rem; background: var(--bg-surface); flex-shrink: 0;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
                 <label style="color: var(--accent-color); font-size: 0.85rem; font-weight: 600;"><i class="fas fa-project-diagram"></i> RAG 参考翻译</label>
                 <button id="btn-close-rag" style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1rem;">&times;</button>
               </div>
-              <div id="rag-ref-list" style="display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.85rem; max-height: 150px; overflow-y: auto;"></div>
+              <div id="rag-ref-list" style="display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.85rem; max-height: 120px; overflow-y: auto;"></div>
             </div>
 
-            <div style="flex: 1; display: flex; flex-direction: column;">
+            <div style="display: flex; flex-direction: column;">
               <label style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 0.5rem; display:block;">译文 (支持手动编辑)</label>
-              <textarea id="text-translation" style="flex: 1; resize: none; font-size: 1.1rem; line-height: 1.6; padding: 1rem;"></textarea>
+              <textarea id="text-translation" style="min-height: 180px; resize: vertical; font-size: 1.1rem; line-height: 1.6; padding: 1rem; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);"></textarea>
+            </div>
+            
+            <div style="display: flex; justify-content: flex-end; flex-shrink: 0;">
+              <button id="btn-submit" class="btn btn-primary" style="padding: 0.8rem 2.5rem; font-size: 1rem;">提交至服务器并保存 TM 记录 (下一条)</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 右侧：术语管理栏 (内联常驻) -->
+        <div class="glass-panel" id="term-sidebar" style="width: 320px; flex-shrink: 0; display: flex; flex-direction: column; min-width: 0; padding: 0; overflow: hidden;">
+          <div style="padding: 1rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="margin: 0; font-size: 1rem; display: flex; align-items: center; gap: 0.5rem;"><i class="fas fa-book" style="color: var(--accent-color);"></i> 术语管理</h3>
+            <div style="display: flex; gap: 0.3rem;">
+              <button id="btn-terms" class="btn btn-sm" title="管理项目全量术语"><i class="fas fa-external-link-alt"></i></button>
+              <button id="btn-add-term-toggle" class="btn btn-sm" title="显示/隐藏新增表单"><i class="fas fa-plus"></i></button>
+            </div>
+          </div>
+          
+          <!-- 新增表单 (默认折叠) -->
+          <div id="inline-term-add" style="display: none; padding: 1rem; border-bottom: 1px solid var(--border-color); background: rgba(255,255,255,0.02); animation: slideDown 0.2s ease;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.8rem;">
+              <select id="inline-term-type" style="padding: 0.4rem; font-size: 0.8rem;">
+                <option value="1">名词</option><option value="2">动词</option><option value="3">形容词</option><option value="4">副词</option><option value="0">其他</option>
+              </select>
+              <label style="display: flex; align-items: center; font-size: 0.75rem; color: var(--text-secondary); cursor:pointer;">
+                <input type="checkbox" id="inline-term-cs" style="margin-right: 3px;" /> 区分大小写
+              </label>
+            </div>
+            <input type="text" id="inline-term-ori" placeholder="原文" style="width: 100%; padding: 0.5rem; margin-bottom: 0.5rem; font-size: 0.85rem;" />
+            <input type="text" id="inline-term-tran" placeholder="译文" style="width: 100%; padding: 0.5rem; margin-bottom: 0.5rem; font-size: 0.85rem;" />
+            <input type="text" id="inline-term-vars" placeholder="变体 (用 | 分割)" style="width: 100%; padding: 0.5rem; margin-bottom: 0.8rem; font-size: 0.85rem;" />
+            <button id="btn-inline-add-term" class="btn btn-primary btn-sm" style="width: 100%;">确定添加</button>
+          </div>
+
+          <!-- 搜索与列表 -->
+          <div style="padding: 0.8rem; border-bottom: 1px solid var(--border-color);">
+            <div style="position: relative;">
+              <i class="fas fa-search" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); font-size: 0.8rem;"></i>
+              <input type="text" id="inline-term-search" placeholder="在库中检索..." style="width: 100%; padding: 0.4rem 0.6rem 0.4rem 2rem; font-size: 0.85rem;" />
             </div>
           </div>
 
-          <div style="margin-top: 1.5rem; display: flex; justify-content: flex-end; gap: 1rem;">
-            <button id="btn-submit" class="btn btn-primary" style="padding: 0.6rem 2rem; font-size: 1rem;">提交至服务器并保存 TM 记录 (下一条)</button>
+          <div id="inline-term-list" style="flex: 1; overflow-y: auto; padding: 0.8rem; display: flex; flex-direction: column; gap: 0.6rem;">
+            <!-- 术语条目将渲染在此 -->
           </div>
         </div>
       </div>
     `;
 
+
     bindHeaderEvents();
     renderStringList();
+    initWorkbenchLogic(); 
     if (strings.length > 0) selectString(0);
   }
 
@@ -175,7 +231,11 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
   }
 
   function bindHeaderEvents() {
-    document.getElementById('btn-back').addEventListener('click', () => navigate(`/files?projectId=${projectId}`));
+    document.getElementById('btn-back').addEventListener('click', () => {
+      document.body.style.overflow = '';
+      document.querySelector('.app-container').style.height = '';
+      navigate(`/files?projectId=${projectId}`);
+    });
     document.getElementById('btn-terms').addEventListener('click', () => navigate(`/terms?projectId=${projectId}`));
     
     document.getElementById('btn-sort').addEventListener('click', () => {
@@ -190,8 +250,6 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
         navigate(`/translate?projectId=${projectId}&fileId=${fileId}&stage=${tab.dataset.stage}`);
       });
     });
-
-    initWorkbenchLogic();
   }
 
   function selectString(index) {
@@ -282,8 +340,95 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
     }
   }
 
+  function renderInlineTermList(keyword = '') {
+    const listEl = document.getElementById('inline-term-list');
+    if (!listEl) return;
+
+    const filtered = terms.filter(t => 
+      (t.term || '').toLowerCase().includes(keyword.toLowerCase()) || 
+      (t.translation || '').toLowerCase().includes(keyword.toLowerCase())
+    );
+
+    listEl.innerHTML = filtered.map(t => `
+      <div class="glass-panel" style="padding: 0.6rem; border: 1px solid var(--border-color); background: rgba(255,255,255,0.02); display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.85rem;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+          <span style="font-weight: 600; color: var(--text-color);">${escapeHtml(t.term)}</span>
+          ${t.caseSensitive ? '<span style="font-size: 0.7rem; color: var(--warning-color); border: 1px solid var(--warning-color); padding: 0 4px; border-radius: 3px;">大小写</span>' : ''}
+        </div>
+        <div style="color: var(--accent-color); font-weight: 500;">${escapeHtml(t.translation)}</div>
+        ${t.variants && t.variants.length ? `<div style="font-size: 0.75rem; color: var(--text-secondary); opacity: 0.8;">变体: ${escapeHtml(t.variants.join(', '))}</div>` : ''}
+      </div>
+    `).join('') || '<div style="text-align:center; color: var(--text-secondary); padding: 1rem; font-size: 0.85rem;">未找到相关术语</div>';
+  }
+
   function initWorkbenchLogic() {
     const textTranslation = document.getElementById('text-translation');
+
+    // 初始渲染侧边栏术语
+    renderInlineTermList();
+
+    // 术语搜索逻辑
+    document.getElementById('inline-term-search').addEventListener('input', (e) => {
+      renderInlineTermList(e.target.value);
+    });
+
+    // 术语新增表单切换
+    document.getElementById('btn-add-term-toggle').addEventListener('click', () => {
+      const form = document.getElementById('inline-term-add');
+      form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    });
+
+    // 执行术语添加
+    document.getElementById('btn-inline-add-term').addEventListener('click', async () => {
+      const term = document.getElementById('inline-term-ori').value.trim();
+      const translation = document.getElementById('inline-term-tran').value.trim();
+      if (!term || !translation) {
+        const { showToast } = await import('../components/toast.js');
+        showToast('原文和译文不能为空', 'warning');
+        return;
+      }
+
+      const btn = document.getElementById('btn-inline-add-term');
+      btn.disabled = true;
+      btn.innerText = '提交中...';
+
+      try {
+        const variantsInput = document.getElementById('inline-term-vars').value.trim();
+        const variants = variantsInput ? variantsInput.split(/[|,\n]+/).map(s => s.trim()).filter(Boolean) : [];
+        
+        const termData = {
+          term,
+          translation,
+          type: parseInt(document.getElementById('inline-term-type').value),
+          caseSensitive: document.getElementById('inline-term-cs').checked,
+          variants: variants,
+          description: '' // 侧边栏简化版暂不传 description
+        };
+        
+        const { paraTranzApi } = await import('../api/paratranz.js');
+        await paraTranzApi.createTerm(projectId, termData);
+        
+        terms.unshift(termData);
+        const { showToast } = await import('../components/toast.js');
+        showToast('术语创建成功', 'success');
+        
+        // 重置表单
+        document.getElementById('inline-term-ori').value = '';
+        document.getElementById('inline-term-tran').value = '';
+        document.getElementById('inline-term-vars').value = '';
+        document.getElementById('inline-term-add').style.display = 'none';
+
+        // 刷新列表与原文高亮
+        renderInlineTermList(document.getElementById('inline-term-search').value);
+        if (currentIndex !== -1) selectString(currentIndex);
+      } catch (e) {
+        const { showToast } = await import('../components/toast.js');
+        showToast('创建失败: ' + e.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerText = '确定添加';
+      }
+    });
 
     document.getElementById('btn-tm-match').addEventListener('click', () => {
       if (currentIndex === -1) return;
@@ -318,7 +463,7 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
 
     document.getElementById('btn-show-prev').addEventListener('click', () => {
       const prevSection = document.getElementById('ai-prev-list');
-      prevSection.style.display = prevSection.style.display === 'none' ? 'block' : 'none';
+      prevSection.style.display = prevSection.style.display === 'none' ? 'flex' : 'none';
     });
 
     function renderCandidateCards(containerEl, candidates) {
@@ -355,7 +500,7 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
         showToast('当前没有候选文本，请先执行 AI 翻译', 'warning');
         return;
       }
-      panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+      panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
     });
 
     // 关闭 RAG 参考面板
@@ -431,8 +576,15 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
       btn.innerText = suggestion ? '获取建议修改中...' : 'AI 翻译中...';
       const textTranslation = document.getElementById('text-translation');
       
+      // 过滤术语表：只将真正在当前原文中出现的术语传递给 AI，防止全字典下发带来 token 爆炸和多义词干扰
+      const matchedTerms = terms.filter(t => {
+        const regex = buildTermRegex(t);
+        if (!regex) return false;
+        return regex.test(str.original);
+      });
+      
       try {
-        const result = await AIClient.translateSingle({ original: str.original, terms: terms, suggestion, references: currentReferences });
+        const result = await AIClient.translateSingle({ original: str.original, terms: matchedTerms, suggestion, references: currentReferences });
         
         let candidates = [];
         // 正则提取所有被【】包裹的内容，支持跨行提取 (s flag)
@@ -462,7 +614,7 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
           }
           document.getElementById('ai-prev-list').style.display = 'none';
           renderCandidateCards(listEl, candidates);
-          panel.style.display = 'block';
+          panel.style.display = 'flex';
         }
       } catch (e) {
         showToast(e.message, 'error');
@@ -532,10 +684,16 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
 function highlightTerms(text, terms) {
   if (!terms || terms.length === 0) return escapeHtml(text);
   let res = escapeHtml(text);
-  terms.forEach(t => {
-    if(!t.term) return;
-    const termExp = new RegExp(escapeRegExp(t.term), 'gi');
-    res = res.replace(termExp, `<span style="color: var(--accent-color); font-weight: 500; cursor: help; border-bottom: 1px dashed var(--accent-color);" title="${escapeHtml(t.translation||'')}">${t.term}</span>`);
+  
+  // 按照术语长度从长到短排序，防止短词优先替换导致长词被破坏（例如先匹配 sword 再匹配 word）
+  const sortedTerms = [...terms].sort((a, b) => (b.term || '').length - (a.term || '').length);
+  
+  sortedTerms.forEach(t => {
+    const termExp = buildTermRegex(t);
+    if (!termExp) return;
+    
+    // 使用 $& 保留原文的大小写，而不是用 t.term 强制替换为术语表的大小写
+    res = res.replace(termExp, `<span style="color: var(--accent-color); font-weight: 500; cursor: help; border-bottom: 1px dashed var(--accent-color);" title="${escapeHtml(t.translation||'')}">$&</span>`);
   });
   return res;
 }
@@ -546,4 +704,31 @@ function escapeHtml(unsafe) {
 
 function escapeRegExp(string) {
   return string.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&'); 
+}
+
+/**
+ * 构造用于匹配原串的正则表达式，支持：大小写敏感(caseSensitive) 和 变体匹配(variants)
+ */
+function buildTermRegex(termObj) {
+  if (!termObj || !termObj.term) return null;
+  
+  // 搜集主词和所有的变体
+  const words = [termObj.term];
+  if (Array.isArray(termObj.variants)) {
+    words.push(...termObj.variants);
+  }
+  
+  // 对每一个词语转义以防特殊字符破坏正则
+  const escapedWords = words.map(w => escapeRegExp(w));
+  // 拼接成 (词1|词2|变体1...) 格式
+  const coreRegex = escapedWords.length > 1 ? `(${escapedWords.join('|')})` : escapedWords[0];
+  
+  // 判定单词边界（只要主词首尾是英文字母即可）
+  const prefix = /^\w/.test(termObj.term) ? '\\b' : '';
+  const suffix = /\w$/.test(termObj.term) ? '\\b' : '';
+  
+  // 利用 API 返回的 caseSensitive 决定是否应用大小写忽略旗标 i
+  const flags = termObj.caseSensitive ? 'g' : 'gi';
+  
+  return new RegExp(prefix + coreRegex + suffix, flags);
 }

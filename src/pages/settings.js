@@ -141,6 +141,11 @@ export function render(container) {
               <input type="password" id="inp-qdrant-key" placeholder="API Key" value="${s.qdrantApiKey || ''}" style="width: 100%;" />
             </div>
           </div>
+          <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed var(--border-color); display: flex; justify-content: flex-end;">
+            <button id="btn-reset-qdrant" class="btn btn-sm" style="background: none; border: 1px solid var(--danger-color); color: var(--danger-color);" title="当更换 Embedding 模型导致维度报错时，使用此功能清空远端集合并重置本地状态">
+              <i class="fas fa-exclamation-triangle"></i> 重置 Qdrant 架构
+            </button>
+          </div>
         </div>
       </div>
 
@@ -181,6 +186,32 @@ export function render(container) {
   if (chkQdrant) {
     chkQdrant.addEventListener('change', () => {
       document.getElementById('panel-qdrant').style.display = chkQdrant.checked ? 'block' : 'none';
+    });
+  }
+
+  // --- 重置 Qdrant 架构 ---
+  const btnReset = document.getElementById('btn-reset-qdrant');
+  if (btnReset) {
+    btnReset.addEventListener('click', async () => {
+      const ok = confirm('【警告：不可逆操作】\n检测到向量维度冲突或更换模型时，需要执行此重置。\n操作将：\n1. 永久删除 Qdrant 上的 paratranz_rag 集合(包含所有项目数据)；\n2. 重置本地所有词条的“已向量化”标记。\n\n是否继续？');
+      if (!ok) return;
+
+      btnReset.disabled = true;
+      btnReset.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 正在重置...';
+
+      try {
+        const { VectorStore } = await import('../utils/vectorStore.js');
+        await VectorStore.resetQdrantCollection();
+        const { showToast } = await import('../components/toast.js');
+        showToast('Qdrant 架构与本地状态已成功重置！', 'success');
+        setTimeout(() => { location.reload(); }, 1500);
+      } catch (e) {
+        console.error(e);
+        const { showToast } = await import('../components/toast.js');
+        showToast('重置失败: ' + e.message, 'error');
+        btnReset.disabled = false;
+        btnReset.innerHTML = '<i class="fas fa-exclamation-triangle"></i> 重置 Qdrant 架构';
+      }
     });
   }
 

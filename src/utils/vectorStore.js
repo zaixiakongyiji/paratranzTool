@@ -275,7 +275,8 @@ export const VectorStore = {
     }
 
     // =============== 原生 IndexedDB 检索模式 ===============
-    const items = await this.getItemsWithEmbedding(projectId);
+    // 如果之前开启了 Qdrant 模式，本地条目的 embedding 为 null，需要过滤掉，防止计算报错
+    const items = (await this.getItemsWithEmbedding(projectId)).filter(it => it.embedding);
     if (items.length === 0) return [];
     
     const queryLen = Math.sqrt(queryVec.reduce((sum, v) => sum + v * v, 0));
@@ -348,7 +349,7 @@ export const VectorStore = {
   /**
    * 清空指定项目的所有数据
    */
-  async clearProject(projectId) {
+  async deleteProjectData(projectId) {
     const db = await openDB();
     const tx = db.transaction([STORE_NAME, META_STORE], 'readwrite');
     const store = tx.objectStore(STORE_NAME);
@@ -372,5 +373,52 @@ export const VectorStore = {
       tx.oncomplete = resolve;
       tx.onerror = () => reject(tx.error);
     });
+    
+    // 同步清空 Qdrant 远端向量库中该项目的数据
+    const settings = Storage.getSettings();
+    if (settings.qdrantEnabled && settings.qdrantUrl) {
+      try {
+        const { QdrantClient } = await import('../api/qdrant.js');
+        await QdrantClient.deletePointsByProjectId(settings.qdrantUrl, settings.qdrantApiKey, projectId);
+      } catch (e) {
+        console.warn("清理 Qdrant 失败:", e);
+      }
+    }
+  },
+
+  /**
+   * 彻底清空远端 Qdrant 集合（包括所有项目的数据）
+   * 专门用于解决向量维度不匹配 (Dimension Error) 的情况
+   */
+  async resetQdrantCollection() {
+    const settings = Storage.getSettings();
+    if (settings.qdrantEnabled && settings.qdrantUrl) {
+      const { QdrantClient } = await import('../api/qdrant.js');
+      await QdrantClient.deleteCollection(settings.qdrantUrl, settings.qdrantApiKey);
+      
+      // 还需要清除本地所有条目的 hasEmbedding 标志，因为集合没了，它们在服务器上也就不存在了
+      const db = await openDB();
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      
+      const req = store.openCursor();
+      return new Promise((resolve, reject) => {
+        req.onsuccess = (e) => {
+          const cursor = e.target.result;
+          if (cursor) {
+            const item = cursor.value;
+            if (item.hasEmbedding === 1) {
+              item.hasEmbedding = 0;
+              item.embedding = null;
+              cursor.update(item);
+            }
+            cursor.continue();
+          } else {
+            resolve();
+          }
+        };
+        req.onerror = () => reject(req.error);
+      });
+    }
   }
 };

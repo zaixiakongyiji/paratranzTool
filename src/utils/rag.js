@@ -95,24 +95,39 @@ export const RAG = {
     const pending = await VectorStore.getItemsWithoutEmbedding(projectId);
     if (pending.length === 0) return 0;
     
-    const texts = pending.map(item => item.original);
     const settings = Storage.getSettings();
+    const BATCH_SIZE = 50; // 每 50 条为一个存储检查点
+    let totalDone = 0;
     
-    const embeddings = await EmbeddingClient.embedBatch(
-      texts,
-      (done, total) => {
-        if (onProgress) onProgress('embedding', `向量化进度: ${done}/${total}`);
+    for (let i = 0; i < pending.length; i += BATCH_SIZE) {
+      const chunk = pending.slice(i, i + BATCH_SIZE);
+      const texts = chunk.map(item => item.original);
+      
+      if (onProgress) onProgress('embedding', `正在生成第 ${i + 1} - ${Math.min(i + BATCH_SIZE, pending.length)} 条向量...`);
+      
+      const embeddings = await EmbeddingClient.embedBatch(
+        texts,
+        (doneInChunk, totalInChunk) => {
+          if (onProgress) {
+            const currentTotalDone = i + doneInChunk;
+            onProgress('embedding', `向量化进度: ${currentTotalDone}/${pending.length}`);
+          }
+        },
+        10, // 接口调用层级的并发
+        300 // 稍微降低延迟提高效率
+      );
+      
+      // 关键：每拿到一批结果，立即持久化到数据库（和 Qdrant）
+      for (let j = 0; j < chunk.length; j++) {
+        if (embeddings[j]) {
+          await VectorStore.setEmbedding(chunk[j].id, embeddings[j], settings.embeddingModel);
+        }
       }
-    );
-    
-    // 写入向量
-    for (let i = 0; i < pending.length; i++) {
-      if (embeddings[i]) {
-        await VectorStore.setEmbedding(pending[i].id, embeddings[i], settings.embeddingModel);
-      }
+      
+      totalDone += embeddings.length;
     }
     
-    return embeddings.length;
+    return totalDone;
   },
 
   /**

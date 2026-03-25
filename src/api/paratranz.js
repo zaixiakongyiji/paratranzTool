@@ -61,6 +61,12 @@ class ParaTranzClient {
     const res = await this._request(`/projects/${projectId}/terms?page=1&pageSize=500`);
     return res.results;
   }
+  async createTerm(projectId, termData) {
+    return await this._request(`/projects/${projectId}/terms`, {
+      method: 'POST',
+      body: JSON.stringify(termData)
+    });
+  }
 
   async _concurrentUpdate(projectId, updates, limit = 5) {
     const results = [], executing = [];
