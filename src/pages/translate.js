@@ -131,13 +131,12 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
               <div id="rag-ref-list" style="display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.85rem; max-height: 120px; overflow-y: auto;"></div>
             </div>
 
-            <div style="display: flex; flex-direction: column;">
-              <label style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 0.5rem; display:block;">译文 (支持手动编辑)</label>
-              <textarea id="text-translation" style="min-height: 180px; resize: vertical; font-size: 1.1rem; line-height: 1.6; padding: 1rem; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);"></textarea>
-            </div>
-            
-            <div style="display: flex; justify-content: flex-end; flex-shrink: 0;">
-              <button id="btn-submit" class="btn btn-primary" style="padding: 0.8rem 2.5rem; font-size: 1rem;">提交至服务器并保存 TM 记录 (下一条)</button>
+            <div style="display: flex; flex-direction: column; flex-shrink: 0;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-shrink: 0;">
+                <label style="color: var(--text-secondary); font-size: 0.9rem;">译文 (支持手动编辑)</label>
+                <button id="btn-submit" class="btn btn-primary btn-sm" style="padding: 0.3rem 1rem; font-size: 0.85rem;">提交至服务器并保存 (下一条)</button>
+              </div>
+              <textarea id="text-translation" placeholder="输入译文..." style="min-height: 120px; resize: none; overflow-y: hidden; font-size: 1.1rem; line-height: 1.6; padding: 1rem; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); transition: height 0.1s ease;"></textarea>
             </div>
           </div>
         </div>
@@ -266,6 +265,7 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
 
     document.getElementById('text-original').innerHTML = highlightTerms(str.original, terms);
     document.getElementById('text-translation').value = str.translation || '';
+    autoResizeTextarea(document.getElementById('text-translation'));
 
     const matched = Storage.searchTM(projectId, str.original);
     if (matched && !document.getElementById('text-translation').value) {
@@ -357,8 +357,16 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
     `).join('') || '<div style="text-align:center; color: var(--text-secondary); padding: 1rem; font-size: 0.85rem;">未找到相关术语</div>';
   }
 
+  function autoResizeTextarea(el) {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = (el.scrollHeight) + 'px';
+  }
+
   function initWorkbenchLogic() {
     const textTranslation = document.getElementById('text-translation');
+    
+    textTranslation.addEventListener('input', () => autoResizeTextarea(textTranslation));
 
     // 初始渲染侧边栏术语
     renderInlineTermList();
