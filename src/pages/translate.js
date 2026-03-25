@@ -38,16 +38,12 @@ export async function render(container, query) {
 
     strings = strings || [];
     
-    // 进入工作台，禁用全局滚动，启用三列独立布局
-    document.body.style.overflow = 'hidden';
-    const appCont = document.querySelector('.app-container');
-    if (appCont) appCont.style.height = '100vh';
+    // 进入工作台，添加特定类名以启用三列独立布局布局
+    document.body.classList.add('translate-mode');
     
     renderWorkbench(container, projectId, fileId, strings, terms, currentStage);
   } catch (error) {
-    document.body.style.overflow = '';
-    const appCont = document.querySelector('.app-container');
-    if (appCont) appCont.style.height = '';
+    document.body.classList.remove('translate-mode');
     container.innerHTML = `<div class="glass-panel" style="color: var(--danger-color)">初始化失败 ${error.message}</div>`;
   }
 }

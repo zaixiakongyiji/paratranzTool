@@ -39,24 +39,28 @@ body {
   color: var(--text-primary);
   line-height: 1.5;
   height: 100vh;
-  overflow: hidden;
+  width: 100vw;
+  overflow: hidden; /* 锁定 body，防止出现双滚动条 */
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 .app-container {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
 }
 
 main {
   flex: 1;
   padding: 1rem 2rem 2rem 2rem;
-  margin: 0 auto;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
+  overflow-y: auto; /* 默认页面（设置、项目）在这里滚动 */
   min-height: 0;
+}
+
+/* 翻译模式下的特殊布局 */
+body.translate-mode main {
+  overflow-y: hidden; /* 翻译页禁用 main 的滚动，使用三列独立滚动 */
+  padding: 0;
 }
 
 .glass-panel {

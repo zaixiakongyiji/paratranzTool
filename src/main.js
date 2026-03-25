@@ -7,9 +7,9 @@ document.querySelector('#app').innerHTML = `
       <nav style="display: flex; gap: 1.5rem; align-items: center;">
         <a href="#/projects" class="nav-link">项目</a>
         <a href="#/glossary" class="nav-link">个人知识库</a>
-        <a href="#/settings" class="nav-link">设置</a>
-        <button id="theme-toggle" class="btn btn-sm" style="background: transparent; border: none; font-size: 1.2rem; padding: 0; color: var(--text-primary);" title="切换主题">
-          <i class="fas fa-moon"></i>
+        <a href="#/settings" class="nav-link" style="margin-right: 0.5rem;">设置</a>
+        <button id="theme-toggle" class="btn btn-sm" style="background: var(--bg-surface-hover); border: 1px solid var(--border-color); width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-primary);" title="切换主题">
+          <i class="fas fa-sun"></i>
         </button>
       </nav>
     </header>
@@ -28,29 +28,21 @@ window.addEventListener('DOMContentLoaded', () => {
   const themeToggleBtn = document.getElementById('theme-toggle');
   const icon = themeToggleBtn.querySelector('i');
   
-  const savedTheme = localStorage.getItem('theme') || 'dark';
-  if (savedTheme === 'light') {
-    document.documentElement.setAttribute('data-theme', 'light');
-    icon.classList.remove('fa-moon');
-    icon.classList.add('fa-sun');
-  } else {
-    document.documentElement.setAttribute('data-theme', 'dark');
-  }
+  const updateIcon = (theme) => {
+    if (theme === 'dark') {
+      icon.className = 'fas fa-moon';
+    } else {
+      icon.className = 'fas fa-sun';
+    }
+  };
+
+  const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+  updateIcon(currentTheme);
 
   themeToggleBtn.addEventListener('click', () => {
-    let currentTheme = document.documentElement.getAttribute('data-theme');
-    let targetTheme = 'light';
-
-    if (currentTheme === 'light') {
-      targetTheme = 'dark';
-      icon.classList.remove('fa-sun');
-      icon.classList.add('fa-moon');
-    } else {
-      icon.classList.remove('fa-moon');
-      icon.classList.add('fa-sun');
-    }
-
-    document.documentElement.setAttribute('data-theme', targetTheme);
-    localStorage.setItem('theme', targetTheme);
+    const theme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+    updateIcon(theme);
   });
 });

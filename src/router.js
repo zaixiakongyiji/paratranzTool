@@ -33,6 +33,9 @@ export function navigate(path, fromHashChange = false) {
   const [pathname, queryString] = path.split('?');
   const query = new URLSearchParams(queryString || '');
   
+  // 切换页面时，默认清理翻译模式的样式锁定
+  document.body.classList.remove('translate-mode');
+  
   const routerView = document.getElementById('router-view');
   routerView.innerHTML = `<div style="text-align:center; padding: 2rem;">加载中...</div>`;
   

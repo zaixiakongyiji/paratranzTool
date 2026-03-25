@@ -67,27 +67,27 @@ export async function render(container, query) {
 
     function renderPage() {
       container.innerHTML = `
-        <div style="display: flex; gap: 1.5rem; height: 100%;">
-          <!-- 左侧 TODO 侧边栏 -->
-          <div class="glass-panel" style="width: 200px; flex-shrink: 0; display: flex; flex-direction: column; gap: 0.8rem; padding: 1rem;">
+        <div style="display: flex; gap: 1.5rem; align-items: flex-start;">
+          <!-- 左侧 TODO 侧边栏 (固定宽度，跟随滚动) -->
+          <div class="glass-panel" style="width: 200px; flex-shrink: 0; display: flex; flex-direction: column; gap: 0.8rem; padding: 1rem; position: sticky; top: 0;">
             <div style="font-weight: 600; color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 0.5rem;">TODO 概览</div>
             <div class="nav-item active" style="padding: 0.6rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.6rem; background: var(--accent-color); color: white;">
               <i class="fas fa-file-alt"></i> 文件列表
             </div>
             <div class="nav-item" style="padding: 0.6rem; border-radius: 6px; cursor: not-allowed; display: flex; align-items: center; gap: 0.6rem; opacity: 0.5;">
-              <i class="fas fa-chart-pie"></i> 任务统计 (TODO)
+              <i class="fas fa-chart-pie"></i> 统计 (待办)
             </div>
             <div class="nav-item" style="padding: 0.6rem; border-radius: 6px; cursor: not-allowed; display: flex; align-items: center; gap: 0.6rem; opacity: 0.5;">
-              <i class="fas fa-history"></i> 历史记录 (TODO)
+              <i class="fas fa-history"></i> 历史 (待办)
             </div>
-            <div style="margin-top: auto; padding: 0.8rem; border-top: 1px solid var(--border-color); font-size: 0.75rem; color: var(--text-secondary);">
+            <div style="margin-top: 1.5rem; padding-top: 0.8rem; border-top: 1px solid var(--border-color); font-size: 0.75rem; color: var(--text-secondary);">
               <button id="btn-back" class="btn btn-sm" style="width: 100%;">返回项目</button>
             </div>
           </div>
 
-          <!-- 右侧主内容 -->
-          <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden;">
-            <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 1.2rem; flex-shrink: 0;">
+          <!-- 右侧主内容 (主容器自然滚动) -->
+          <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+            <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; flex-shrink: 0;">
               <h2 style="font-size: 1.2rem; margin: 0;">文件管理 (ID: ${projectId})</h2>
               <div style="display: flex; gap: 0.5rem;">
                 <button id="btn-sync-rag" class="btn btn-sm" title="同步语料库"><i class="fas fa-sync-alt"></i> 同步</button>
@@ -95,31 +95,43 @@ export async function render(container, query) {
               </div>
             </div>
 
-            <div id="file-list-scroll" style="flex: 1; overflow-y: auto; padding-right: 0.5rem; display: flex; flex-direction: column; gap: 0.8rem;">
-              ${groups.map((g, gi) => `
+            <!-- 筛选栏 -->
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 1.2rem; flex-shrink: 0;">
+              <button class="btn btn-sm filter-btn ${currentFilter === 'all' ? 'btn-primary' : ''}" data-filter="all">全部</button>
+              <button class="btn btn-sm filter-btn ${currentFilter === 'todo' ? 'btn-primary' : ''}" data-filter="todo">待处理</button>
+              <button class="btn btn-sm filter-btn ${currentFilter === 'done' ? 'btn-primary' : ''}" data-filter="done">已完成</button>
+            </div>
+
+            <div id="file-list-content" style="display: flex; flex-direction: column; gap: 0.8rem; padding-bottom: 2rem;">
+              ${groups.map((g, gi) => {
+                const filteredFiles = g.files.filter(f => {
+                  if (currentFilter === 'done') return f.isDone;
+                  if (currentFilter === 'todo') return !f.isDone;
+                  return true;
+                });
+                if (filteredFiles.length === 0) return '';
+                
+                return `
                 <div class="folder-group glass-panel" style="padding: 0; border: 1px solid var(--border-color); overflow: hidden;">
                   <div class="folder-header" style="padding: 0.8rem 1rem; cursor: pointer; display: flex; align-items: center; background: rgba(255,255,255,0.03); hover: background: rgba(255,255,255,0.05);">
-                    <i class="fas fa-chevron-right folder-arrow" style="margin-right: 0.8rem; transition: transform 0.2s; font-size: 0.8rem; color: var(--text-secondary);"></i>
-                    <div style="flex: 1; font-weight: 500;">${g.name} <span style="font-weight: normal; font-size: 0.8rem; color: var(--text-secondary); margin-left: 0.4rem;">共 ${g.files.length} 文件</span></div>
+                    <i class="fas fa-chevron-right folder-arrow" style="margin-right: 0.8rem; transition: transform 0.2s; font-size: 0.8rem; color: var(--text-secondary); ${(currentFilter !== 'all') ? 'transform: rotate(90deg);' : ''}"></i>
+                    <div style="flex: 1; font-weight: 500;">${g.name} <span style="font-weight: normal; font-size: 0.8rem; color: var(--text-secondary); margin-left: 0.4rem;">${filteredFiles.length} 文件</span></div>
                     <div style="display: flex; align-items: center; gap: 1rem;">
                       <div class="mini-progress" style="width: 60px; height: 4px; background: var(--bg-color); border-radius: 2px; overflow: hidden;">
                         <div style="width: ${g.percent}%; height: 100%; background: var(--accent-color);"></div>
                       </div>
                       <span style="font-size: 0.75rem; color: var(--text-secondary); min-width: 35px; text-align: right;">${g.percent}%</span>
-                      <span style="font-size: 0.75rem; background: var(--bg-surface-hover); padding: 2px 8px; border-radius: 10px; color: var(--text-secondary);">共 ${g.total} 词条</span>
                     </div>
                   </div>
-                  <div class="folder-content" style="display: none; max-height: 400px; overflow-y: auto; border-top: 1px solid var(--border-color); background: rgba(0,0,0,0.1);">
-                    ${g.files.map(f => `
+                  <!-- 面板内部独立滚动，并限制最大高度，防止撑开外层导致排版挤压 -->
+                  <div class="folder-content" style="display: ${(currentFilter !== 'all') ? 'block' : 'none'}; max-height: 500px; overflow-y: auto; border-top: 1px solid var(--border-color); background: rgba(0,0,0,0.1);">
+                    ${filteredFiles.map(f => `
                       <div class="file-row" data-id="${f.id}" style="padding: 0.6rem 1rem 0.6rem 2.8rem; border-bottom: 1px solid rgba(255,255,255,0.03); display: flex; align-items: center; cursor: pointer; position: relative;">
                         <div style="flex: 1; min-width: 0;">
-                          <div style="font-size: 0.85rem; margin-bottom: 0.2rem; display: flex; align-items: center; gap: 0.5rem;">
+                          <div style="font-size: 0.85rem; display: flex; align-items: center; gap: 0.5rem;">
                             <i class="far fa-file-code" style="color: var(--text-secondary);"></i>
                             <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${f.name.split('/').pop()}</span>
                             ${f.isDone ? '<i class="fas fa-check-circle" style="color: var(--success-color); font-size: 0.8rem;"></i>' : ''}
-                          </div>
-                          <div style="height: 2px; width: 100%; background: var(--bg-color); border-radius: 1px; overflow: hidden;">
-                            <div style="width: ${f.percent}%; height: 100%; background: ${f.isDone ? 'var(--success-color)' : 'var(--accent-color)'}; opacity: 0.6;"></div>
                           </div>
                         </div>
                         <div style="display: flex; align-items: center; gap: 1rem; margin-left: 1.5rem; font-size: 0.75rem; color: var(--text-secondary);">
@@ -130,14 +142,23 @@ export async function render(container, query) {
                     `).join('')}
                   </div>
                 </div>
-              `).join('')}
+              `}).join('')}
             </div>
           </div>
         </div>
       `;
 
+
       document.getElementById('btn-back').addEventListener('click', () => {
-        const { navigate } = import('../router.js').then(m => m.navigate('/projects'));
+        navigate('/projects');
+      });
+
+      // 绑定筛选点击
+      container.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          currentFilter = btn.dataset.filter;
+          renderPage();
+        });
       });
 
       // 绑定折叠逻辑

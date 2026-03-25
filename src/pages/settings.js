@@ -82,8 +82,9 @@ export function render(container) {
   const s = Storage.getSettings();
 
   container.innerHTML = `
-    <div style="max-width: 700px; margin: 0 auto;">
-      <h2 style="margin-bottom: 1.5rem;">系统设置</h2>
+    <div style="flex: 1; overflow-y: auto; padding-bottom: 2rem;">
+      <div style="max-width: 700px; margin: 0 auto;">
+        <h2 style="margin-bottom: 1.5rem;">系统设置</h2>
       
       <!-- ParaTranz Token -->
       <div class="glass-panel" style="margin-bottom: 1.2rem;">
@@ -151,6 +152,7 @@ export function render(container) {
 
       <button id="btn-save-settings" class="btn btn-primary" style="width: 100%; margin-top: 0.5rem;">保存所有设置</button>
       <div id="save-msg" style="margin-top: 1rem; color: var(--success-color); display: none; text-align: center;">已保存！</div>
+      </div>
     </div>
   `;
 
