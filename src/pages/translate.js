@@ -123,12 +123,15 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
               </div>
             </div>
 
-            <div id="rag-ref-panel" style="display: none; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.8rem; background: var(--bg-surface); flex-shrink: 0;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                <label style="color: var(--accent-color); font-size: 0.85rem; font-weight: 600;"><i class="fas fa-project-diagram"></i> RAG 参考翻译</label>
-                <button id="btn-close-rag" style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1rem;">&times;</button>
+            <div id="rag-ref-panel" style="display: none; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-surface); flex-shrink: 0; overflow: hidden;">
+              <div id="rag-ref-header" style="display: flex; justify-content: space-between; align-items: center; padding: 0.8rem; cursor: pointer; user-select: none; background: rgba(255,255,255,0.02);">
+                <label style="color: var(--accent-color); font-size: 0.85rem; font-weight: 600; cursor: pointer;"><i class="fas fa-project-diagram"></i> RAG 参考翻译 <span id="rag-ref-count" style="font-weight: normal; opacity: 0.7;"></span></label>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                  <i id="rag-ref-chevron" class="fas fa-chevron-down" style="font-size: 0.8rem; color: var(--text-secondary); transition: transform 0.2s;"></i>
+                  <button id="btn-close-rag" style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.1rem; padding: 0 4px;">&times;</button>
+                </div>
               </div>
-              <div id="rag-ref-list" style="display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.85rem; max-height: 120px; overflow-y: auto;"></div>
+              <div id="rag-ref-list" style="display: none; flex-direction: column; gap: 0.4rem; font-size: 0.85rem; max-height: 250px; overflow-y: auto; padding: 0 0.8rem 0.8rem 0.8rem; border-top: 1px solid var(--border-color);"></div>
             </div>
 
             <div style="display: flex; flex-direction: column; flex-shrink: 0;">
@@ -270,6 +273,7 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
     const matched = Storage.searchTM(projectId, str.original);
     if (matched && !document.getElementById('text-translation').value) {
       document.getElementById('text-translation').value = matched;
+      autoResizeTextarea(document.getElementById('text-translation'));
     }
 
     // 切换文件时重置AI候选面板
@@ -287,7 +291,11 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
     // 重置 RAG 参考面板（不在这里自动检索，等用户手动点击大按钮时检索）
     currentReferences = [];
     const ragPanel = document.getElementById('rag-ref-panel');
+    const ragList = document.getElementById('rag-ref-list');
+    const ragChevron = document.getElementById('rag-ref-chevron');
     if (ragPanel) ragPanel.style.display = 'none';
+    if (ragList) ragList.style.display = 'none';
+    if (ragChevron) ragChevron.style.transform = 'rotate(0deg)';
 
     // 已审核防互触保护
     const isReviewed = str.stage === 2;
@@ -367,6 +375,7 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
     const textTranslation = document.getElementById('text-translation');
     
     textTranslation.addEventListener('input', () => autoResizeTextarea(textTranslation));
+    window.addEventListener('resize', () => autoResizeTextarea(textTranslation));
 
     // 初始渲染侧边栏术语
     renderInlineTermList();
@@ -440,6 +449,7 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
       const match = Storage.searchTM(projectId, str.original);
       if (match) {
         textTranslation.value = match;
+        autoResizeTextarea(textTranslation);
         showToast('完成记忆回显', 'success');
       } else {
         showToast('记忆库无匹配内容', 'warning');
@@ -483,6 +493,7 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
           } else {
             textTranslation.value = candidates[i];
           }
+          autoResizeTextarea(textTranslation);
           containerEl.querySelectorAll('.ai-card').forEach(c => {
             c.style.borderColor = 'var(--border-color)';
             c.style.background = 'transparent';
@@ -505,6 +516,16 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
         return;
       }
       panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+    });
+
+    // RAG 面板切换折叠逻辑
+    document.getElementById('rag-ref-header').addEventListener('click', (e) => {
+      if (e.target.id === 'btn-close-rag') return;
+      const list = document.getElementById('rag-ref-list');
+      const chevron = document.getElementById('rag-ref-chevron');
+      const isHidden = list.style.display === 'none';
+      list.style.display = isHidden ? 'flex' : 'none';
+      chevron.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
     });
 
     // 关闭 RAG 参考面板
@@ -533,16 +554,25 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
         const refs = await RAG.retrieveReferences(projectId, str.original, { fileId });
         currentReferences = refs;
         if (refs.length > 0) {
-          const ragList = document.getElementById('rag-ref-list');
           const ragPanel = document.getElementById('rag-ref-panel');
+          const ragList = document.getElementById('rag-ref-list');
+          const ragCount = document.getElementById('rag-ref-count');
+          ragCount.innerText = `(${refs.length})`;
           ragList.innerHTML = refs.map((ref, i) =>
-            `<div style="padding: 0.4rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-color);">
-              <div style="color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 0.2rem;">相似度: ${(ref.score * 100).toFixed(1)}% | ${ref.fileName}</div>
-              <div style="font-size: 0.8rem;"><strong>原:</strong> ${ref.original.substring(0, 80)}...</div>
-              <div style="font-size: 0.8rem; color: var(--success-color);"><strong>译:</strong> ${ref.translation.substring(0, 80)}...</div>
+            `<div style="padding: 0.6rem; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-color); margin-top: 0.4rem;">
+              <div style="color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 0.3rem; display: flex; justify-content: space-between;">
+                <span>相似度: ${(ref.score * 100).toFixed(1)}%</span>
+                <span>${ref.fileName}</span>
+              </div>
+              <div style="font-size: 0.85rem; line-height: 1.4; margin-bottom: 0.4rem; color: var(--text-secondary);"><strong>原:</strong> ${escapeHtml(ref.original)}</div>
+              <div style="font-size: 0.85rem; line-height: 1.4; color: var(--success-color);"><strong>译:</strong> ${escapeHtml(ref.translation)}</div>
             </div>`
           ).join('');
           ragPanel.style.display = 'block';
+          // 检索成功后默认也保持折叠，或者如果你希望检索到就展示，可以设为 flex
+          // 这里遵循“默认折叠”原则
+          ragList.style.display = 'none';
+          document.getElementById('rag-ref-chevron').style.transform = 'rotate(0deg)';
           return true;
         } else {
           showToast('未找到高相关历史参考', 'info');
@@ -610,6 +640,7 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
         
         if (candidates.length <= 1) {
           textTranslation.value = candidates[0] || result;
+          autoResizeTextarea(textTranslation);
         } else {
           if (listEl.querySelectorAll('.ai-card').length > 0) {
             prevCandidates = Array.from(listEl.querySelectorAll('.ai-card')).map(c => c.textContent.replace(/^#\\d+\\s*/, '').trim());

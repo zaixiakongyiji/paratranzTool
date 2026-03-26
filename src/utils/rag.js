@@ -105,17 +105,26 @@ export const RAG = {
       
       if (onProgress) onProgress('embedding', `正在生成第 ${i + 1} - ${Math.min(i + BATCH_SIZE, pending.length)} 条向量...`);
       
-      const embeddings = await EmbeddingClient.embedBatch(
-        texts,
-        (doneInChunk, totalInChunk) => {
-          if (onProgress) {
-            const currentTotalDone = i + doneInChunk;
-            onProgress('embedding', `向量化进度: ${currentTotalDone}/${pending.length}`);
-          }
-        },
-        10, // 接口调用层级的并发
-        300 // 稍微降低延迟提高效率
-      );
+      let embeddings = [];
+      try {
+        embeddings = await EmbeddingClient.embedBatch(
+          texts,
+          (doneInChunk, totalInChunk) => {
+            if (onProgress) {
+              const currentTotalDone = i + doneInChunk;
+              onProgress('embedding', `向量化进度: ${currentTotalDone}/${pending.length}`);
+            }
+          },
+          10, // 接口调用层级的并发
+          300 // 稍微降低延迟提高效率
+        );
+      } catch (e) {
+        console.warn('向量化批次发生异常，触发熔断保护:', e);
+        if (onProgress) {
+          onProgress('warning', `接口限制或额度耗尽，向量化中止。本次已保存 ${totalDone} 条，剩余记录下次同步时将继续处理。`);
+        }
+        break; // 触发熔断，保留已经完成的 totalDone，直接结束本轮向量化
+      }
       
       // 关键：每拿到一批结果，立即持久化到数据库（和 Qdrant）
       for (let j = 0; j < chunk.length; j++) {

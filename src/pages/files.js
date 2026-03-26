@@ -199,8 +199,11 @@ export async function render(container, query) {
           try {
             const { RAG } = await import('../utils/rag.js');
             const { showToast } = await import('../components/toast.js');
-            await RAG.syncCorpus(projectId, (status, detail) => showToast(detail, 'info'));
-            showToast('全项目语料库同步完成！', 'success');
+            await RAG.syncCorpus(projectId, (status, detail) => {
+              const type = (status === 'warning' || status === 'error') ? status : 'info';
+              showToast(detail, type);
+            });
+            showToast('项目语料库同步流程结束', 'success');
           } catch (e) {
             const { showToast } = await import('../components/toast.js');
             showToast('同步失败: ' + e.message, 'error');

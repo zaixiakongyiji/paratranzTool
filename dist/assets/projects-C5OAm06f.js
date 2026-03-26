@@ -1,4 +1,4 @@
-import{paraTranzApi as d}from"./paratranz-B8WEvIb5.js";import{Storage as i}from"./storage-CDYOJb6j.js";import{n as c}from"./index-D-Nc9a5v.js";import{showToast as s}from"./toast-_A8NGhfi.js";async function v(e){l(e),a()}function l(e){e.innerHTML=`
+import{paraTranzApi as d}from"./paratranz-B8WEvIb5.js";import{Storage as i}from"./storage-CDYOJb6j.js";import{n as c}from"./index-LDMxwuiV.js";import{showToast as s}from"./toast-_A8NGhfi.js";async function v(e){l(e),a()}function l(e){e.innerHTML=`
     <div style="max-width: 1000px; margin: 0 auto;">
       <div style="margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center;">
         <h2 style="font-size: 1.25rem;">我的项目</h2>
