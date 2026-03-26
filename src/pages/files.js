@@ -8,9 +8,12 @@ export async function render(container, query) {
     return;
   }
 
-  container.innerHTML = `<div style="text-align:center; padding: 2rem;">加载文件列表中...</div>`;
+  container.innerHTML = `<div style="text-align:center; padding: 2rem;">加载项目与文件列表中...</div>`;
   try {
-    const files = await paraTranzApi.getFiles(projectId);
+    const [project, files] = await Promise.all([
+      paraTranzApi.getProject(projectId).catch(() => ({ name: '未知项目' })),
+      paraTranzApi.getFiles(projectId)
+    ]);
     
     if (!files || files.length === 0) {
       container.innerHTML = `<div class="glass-panel">该项目下没有文件。</div>`;
@@ -80,15 +83,15 @@ export async function render(container, query) {
             <div class="nav-item" style="padding: 0.6rem; border-radius: 6px; cursor: not-allowed; display: flex; align-items: center; gap: 0.6rem; opacity: 0.5;">
               <i class="fas fa-history"></i> 历史 (待办)
             </div>
-            <div style="margin-top: 1.5rem; padding-top: 0.8rem; border-top: 1px solid var(--border-color); font-size: 0.75rem; color: var(--text-secondary);">
-              <button id="btn-back" class="btn btn-sm" style="width: 100%;">返回项目</button>
-            </div>
           </div>
 
           <!-- 右侧主内容 (主容器自然滚动) -->
           <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
             <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; flex-shrink: 0;">
-              <h2 style="font-size: 1.1rem; margin: 0;">文件管理 (ID: ${projectId})</h2>
+              <div style="display: flex; align-items: center; gap: 0.8rem;">
+                <button id="btn-back-header" class="btn btn-sm" title="返回项目列表" style="padding: 0.4rem 0.6rem;"><i class="fas fa-arrow-left"></i> 返回</button>
+                <h2 style="font-size: 1.1rem; margin: 0;">${project.name || '未知项目'} <span style="font-size: 0.85rem; color: var(--text-secondary); font-weight: normal;">(ID: ${projectId})</span></h2>
+              </div>
               <div style="display: flex; gap: 0.5rem;">
                 <button id="btn-sync-rag" class="btn btn-sm" title="同步语料库"><i class="fas fa-sync-alt"></i> 同步</button>
                 <button id="btn-clear-rag" class="btn btn-sm" style="color: var(--danger-color); border-color: var(--danger-color);" title="清空语料库"><i class="fas fa-trash-alt"></i> 清空</button>
@@ -150,9 +153,12 @@ export async function render(container, query) {
 
 
 
-      document.getElementById('btn-back').addEventListener('click', () => {
-        navigate('/projects');
-      });
+      const goBack = () => navigate('/projects');
+      const btnBack = document.getElementById('btn-back');
+      if (btnBack) btnBack.addEventListener('click', goBack);
+      
+      const btnBackHeader = document.getElementById('btn-back-header');
+      if (btnBackHeader) btnBackHeader.addEventListener('click', goBack);
 
       // 绑定筛选点击
       container.querySelectorAll('.filter-btn').forEach(btn => {
