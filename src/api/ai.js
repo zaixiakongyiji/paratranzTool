@@ -42,7 +42,7 @@ export const AIClient = {
     }
   },
 
-  async translateSingle({ original, terms = [], systemPrompt, suggestion, references }) {
+  async translateSingle({ original, terms = [], systemPrompt, suggestion, references, previousResponse }) {
     const settings = Storage.getSettings();
     if (!settings.aiApiKey) throw new Error('未配置 AI API Key，请前往设置页修改。');
 
@@ -83,11 +83,17 @@ export const AIClient = {
       if (isGemini) {
         const model = settings.aiModel || 'gemini-1.5-pro';
         const url = `${baseUrl}/models/${model}:generateContent?key=${settings.aiApiKey}`;
+        const contents = [{ role: "user", parts: [{ text: userPrompt }] }];
+        if (previousResponse && suggestion) {
+          contents.push({ role: "model", parts: [{ text: previousResponse }] });
+          contents.push({ role: "user", parts: [{ text: `好的，我收到修改建议了。请在刚才的基础上进行调整：\n【用户建议】：${suggestion}` }] });
+        }
+
         const response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+            contents,
             systemInstruction: { parts: [{ text: finalSystemPrompt }] },
             generationConfig: { temperature: 0.7 }
           })
@@ -116,6 +122,11 @@ export const AIClient = {
           { role: "system", content: finalSystemPrompt },
           { role: "user", content: userPrompt }
         ];
+
+        if (previousResponse && suggestion) {
+          messages.push({ role: "assistant", content: previousResponse });
+          messages.push({ role: "user", content: `好的，我收到修改建议了。请在刚才的基础上进行调整：\n【用户建议】：${suggestion}` });
+        }
 
         const response = await fetch(url, {
           method: 'POST',

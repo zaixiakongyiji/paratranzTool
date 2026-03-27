@@ -21,6 +21,13 @@ function renderLayout(container) {
       <div id="project-list-container" class="projects-grid">
         <div style="text-align:center; padding: 2rem; color: var(--text-secondary);">加载中...</div>
       </div>
+      <style>
+        .btn-remove:hover {
+          background: var(--danger-color) !important;
+          color: white !important;
+          transform: scale(1.1);
+        }
+      </style>
     </div>
   `;
 
@@ -68,27 +75,32 @@ function renderProjectList() {
 
   listContainer.innerHTML = myProjects.map((p, index) => `
     <div class="glass-panel project-card" data-id="${p.id}" style="margin-bottom: 1rem; cursor: pointer; transition: transform 0.2s; position: relative;">
-      <h3 style="margin-bottom: 0.5rem;">${escapeHtml(p.name)}</h3>
+      <h3 style="margin-bottom: 0.5rem; padding-right: 30px;">${escapeHtml(p.name)}</h3>
       <p style="color: var(--text-secondary); font-size: 0.9rem;">ID: ${p.id}</p>
-      <button class="btn-remove" data-id="${p.id}" style="position: absolute; top: 10px; right: 10px; background: transparent; border: none; color: var(--danger-color); cursor: pointer; font-size: 1.2rem;">&times;</button>
+      <button class="btn-remove" data-id="${p.id}" title="从本地列表移除" style="position: absolute; top: 12px; right: 12px; width: 28px; height: 28px; border-radius: 50%; background: rgba(220, 53, 69, 0.1); border: none; color: var(--danger-color); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; font-size: 1.2rem; line-height: 1;">&times;</button>
     </div>
   `).join('');
 
-  // 绑定点击跳转
-  listContainer.querySelectorAll('.project-card').forEach(card => {
-    card.addEventListener('mouseenter', () => card.style.transform = 'translateY(-2px)');
-    card.addEventListener('mouseleave', () => card.style.transform = 'translateY(0)');
-    card.addEventListener('click', (e) => {
-      if (e.target.classList.contains('btn-remove')) {
-        e.stopPropagation();
-        Storage.removeMyProject(e.target.getAttribute('data-id'));
-        renderProjectList();
-        return;
-      }
-      const projectId = card.getAttribute('data-id');
-      navigate(`/files?projectId=${projectId}`);
+    listContainer.querySelectorAll('.project-card').forEach(card => {
+      card.addEventListener('mouseenter', () => card.style.transform = 'translateY(-2px)');
+      card.addEventListener('mouseleave', () => card.style.transform = 'translateY(0)');
+      card.addEventListener('click', (e) => {
+        const removeBtn = e.target.closest('.btn-remove');
+        if (removeBtn) {
+          e.stopPropagation();
+          const targetId = removeBtn.getAttribute('data-id');
+          const project = myProjects.find(p => String(p.id) === String(targetId));
+          if (confirm(`确定要从本地移除项目 "${project?.name || targetId}" 吗？\n（此操作不会影响 ParaTranz 上的数据）`)) {
+            Storage.removeMyProject(targetId);
+            showToast('已移除项目', 'info');
+            renderProjectList();
+          }
+          return;
+        }
+        const projectId = card.getAttribute('data-id');
+        navigate(`/files?projectId=${projectId}`);
+      });
     });
-  });
 }
 
 function escapeHtml(unsafe) {

@@ -115,7 +115,8 @@ export const Storage = {
 
   removeMyProject(projectId) {
     let projects = this.getMyProjects();
-    projects = projects.filter(p => p.id !== projectId);
+    // 使用 String 转换以处理 Number/String 类型不一致问题
+    projects = projects.filter(p => String(p.id) !== String(projectId));
     localStorage.setItem('pt_my_projects', JSON.stringify(projects));
   },
 

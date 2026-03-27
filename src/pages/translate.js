@@ -52,6 +52,7 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
   let currentIndex = -1;
   let sortOrder = 'none'; // 'none', 'asc', 'desc'
   let currentReferences = []; // RAG 检索到的参考翻译
+  let lastAiResponse = ''; // 追踪当前词条最近一次 AI 原始响应逻辑
 
   function renderPage() {
     container.innerHTML = `
@@ -287,6 +288,9 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
     const suggestInput = document.getElementById('input-ai-suggest');
     if (suggestPanel) suggestPanel.style.display = 'none';
     if (suggestInput) suggestInput.value = '';
+    
+    // 切换文件或词条时，重置上一轮 AI 响应，确保“第一轮”原则
+    lastAiResponse = '';
 
     // 重置 RAG 参考面板（不在这里自动检索，等用户手动点击大按钮时检索）
     currentReferences = [];
@@ -618,7 +622,15 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
       });
       
       try {
-        const result = await AIClient.translateSingle({ original: str.original, terms: matchedTerms, suggestion, references: currentReferences });
+        const result = await AIClient.translateSingle({ 
+          original: str.original, 
+          terms: matchedTerms, 
+          suggestion, 
+          references: currentReferences,
+          previousResponse: suggestion ? lastAiResponse : null 
+        });
+        
+        lastAiResponse = result; // 记录原始响应，供下一轮纠错（修改建议）使用
         
         let candidates = [];
         // 正则提取所有被【】包裹的内容，支持跨行提取 (s flag)
