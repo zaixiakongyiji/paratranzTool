@@ -12,6 +12,7 @@ export const Storage = {
         aiApiKey: '',            // AI API Key
         aiModel: 'gpt-3.5-turbo',// AI 模型名称
         aiPrompt: '你是一个专业游戏翻译，请将以下文本翻译为简体中文。请参考提供的术语表。', // 翻译提示词
+        ptBaseUrl: '/api',       // ParaTranz API Base URL (默认为相对路径以触发代理)
 
         // --- RAG: 向量化模型（可选） ---
         embeddingEnabled: false,
@@ -53,7 +54,7 @@ export const Storage = {
       // 特殊处理：如果本地存的是空值（由于之前未配置过或保存过空表单），则回退到默认地址和模型
       const fieldsToCheck = [
         'aiBaseUrl', 'embeddingBaseUrl', 'filterBaseUrl', 'rerankBaseUrl',
-        'embeddingModel', 'filterModel', 'rerankModel', 'qdrantUrl'
+        'embeddingModel', 'filterModel', 'rerankModel', 'qdrantUrl', 'ptBaseUrl'
       ];
       fieldsToCheck.forEach(key => {
         if (!merged[key] || merged[key].trim() === '') {

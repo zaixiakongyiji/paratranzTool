@@ -2,7 +2,6 @@ import { Storage } from '../utils/storage.js';
 
 class ParaTranzClient {
   constructor() {
-    this.baseUrl = 'https://paratranz.cn/api';
   }
 
   getHeaders() {
@@ -17,7 +16,8 @@ class ParaTranzClient {
   }
 
   async _request(endpoint, options = {}) {
-    const url = `${this.baseUrl}${endpoint}`;
+    const settings = Storage.getSettings();
+    const url = `${settings.ptBaseUrl}${endpoint}`;
     const response = await fetch(url, {
       ...options,
       headers: { ...this.getHeaders(), ...(options.headers || {}) }

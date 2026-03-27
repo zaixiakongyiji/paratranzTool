@@ -89,9 +89,15 @@ export function render(container) {
       <!-- ParaTranz Token -->
       <div class="glass-panel" style="margin-bottom: 1.2rem;">
         <h3 style="margin: 0 0 1rem 0; font-size: 1rem;"><i class="fas fa-key" style="color: var(--accent-color);"></i> ParaTranz 凭据</h3>
-        <div style="display: flex; gap: 0.5rem; align-items: center;">
-          <input type="password" id="input-pt-token" placeholder="ParaTranz API Token" value="${s.ptToken || ''}" />
-          ${s.ptUsername ? `<span style="color: var(--success-color); font-size: 0.85rem; white-space: nowrap; padding: 0.3rem 0.6rem; background: rgba(16, 185, 129, 0.1); border-radius: 4px;"><i class="fas fa-user-check"></i> ${s.ptUsername}</span>` : ''}
+        <div style="display: flex; flex-direction: column; gap: 0.8rem;">
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <input type="password" id="input-pt-token" placeholder="ParaTranz API Token" value="${s.ptToken || ''}" style="flex: 1;" />
+            ${s.ptUsername ? `<span style="color: var(--success-color); font-size: 0.85rem; white-space: nowrap; padding: 0.3rem 0.6rem; background: rgba(16, 185, 129, 0.1); border-radius: 4px;"><i class="fas fa-user-check"></i> ${s.ptUsername}</span>` : ''}
+          </div>
+          <div>
+            <label style="display: block; margin-bottom: 0.3rem; color: var(--text-secondary); font-size: 0.85rem;">API Base URL (默认为 /api 使用本地分发或代理)</label>
+            <input type="text" id="input-pt-baseurl" placeholder="/api" value="${s.ptBaseUrl || '/api'}" />
+          </div>
         </div>
         <small style="color: var(--text-secondary); display: block; margin-top: 0.4rem;">在 <a href="https://paratranz.cn/users/my" target="_blank" style="color: var(--accent-color);">paratranz.cn</a> 获取。</small>
       </div>
@@ -226,6 +232,7 @@ export function render(container) {
     const newSettings = {
       // ParaTranz
       ptToken: document.getElementById('input-pt-token').value.trim(),
+      ptBaseUrl: document.getElementById('input-pt-baseurl').value.trim() || '/api',
       ptUsername: s.ptUsername || '',
       ptEmail: s.ptEmail || '',
 
