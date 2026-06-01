@@ -10,6 +10,43 @@ const META_STORE = 'sync_meta';
 // 数据库连接缓存
 let dbInstance = null;
 
+function applyMetadataFilters(scored, filters = {}) {
+  let filtered = scored;
+
+  if (filters.fileId) {
+    filtered = filtered.map(s => ({
+      ...s,
+      score: s.item.fileId === filters.fileId ? s.score * 1.2 : s.score
+    }));
+  }
+
+  if (filters.minStage) {
+    filtered = filtered.filter(s => s.item.stage >= filters.minStage);
+  }
+
+  if (filters.maxLenRatio && filters.queryLen) {
+    filtered = filtered.filter(s => {
+      const ratio = s.item.original.length / filters.queryLen;
+      return ratio >= (1 / filters.maxLenRatio) && ratio <= filters.maxLenRatio;
+    });
+  }
+
+  filtered.sort((a, b) => b.score - a.score);
+  return filtered;
+}
+
+async function getProjectItems(projectId) {
+  const db = await openDB();
+  const tx = db.transaction(STORE_NAME, 'readonly');
+  const index = tx.objectStore(STORE_NAME).index('by_project');
+
+  return new Promise((resolve, reject) => {
+    const request = index.getAll(String(projectId));
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  });
+}
+
 /**
  * 打开或创建 IndexedDB 数据库
  */
@@ -106,7 +143,6 @@ export const VectorStore = {
     if (!item) return;
 
     // 2. 如果开启了 Qdrant，先执行网络请求（这一步耗时，不能在事务里做）
-    let hasUploadedToQdrant = false;
     if (settings.qdrantEnabled && settings.qdrantUrl) {
       try {
         const { QdrantClient } = await import('../api/qdrant.js');
@@ -122,7 +158,6 @@ export const VectorStore = {
             stage: item.stage
           }
         }]);
-        hasUploadedToQdrant = true;
       } catch (e) {
         console.error("Qdrant 写入失败:", e);
         throw e;
@@ -133,7 +168,7 @@ export const VectorStore = {
     const txWrite = db.transaction(STORE_NAME, 'readwrite');
     const storeWrite = txWrite.objectStore(STORE_NAME);
     
-    item.embedding = hasUploadedToQdrant ? null : Array.from(embedding);
+    item.embedding = Array.from(embedding);
     item.embeddingModel = modelName;
     item.hasEmbedding = 1;
     storeWrite.put(item);
@@ -244,38 +279,23 @@ export const VectorStore = {
         const { QdrantClient } = await import('../api/qdrant.js');
         const results = await QdrantClient.search(settings.qdrantUrl, settings.qdrantApiKey, projectId, queryVec, topK * 2);
         
-        let scored = results.map(r => ({
+        const scored = applyMetadataFilters(results.map(r => ({
           item: r.payload,
           score: r.score
-        }));
-        
-        // Qdrant 检索回来的结果，在前端再执行一次相同的规则微调过滤
-        if (filters.fileId) {
-          scored = scored.map(s => ({
-            ...s,
-            score: s.item.fileId === filters.fileId ? s.score * 1.2 : s.score
-          }));
+        })), filters).slice(0, topK);
+
+        if (scored.length > 0) {
+          return scored;
         }
-        if (filters.minStage) {
-          scored = scored.filter(s => s.item.stage >= filters.minStage);
-        }
-        if (filters.maxLenRatio && filters.queryLen) {
-          scored = scored.filter(s => {
-            const ratio = s.item.original.length / filters.queryLen;
-            return ratio >= (1 / filters.maxLenRatio) && ratio <= filters.maxLenRatio;
-          });
-        }
-        
-        scored.sort((a, b) => b.score - a.score);
-        return scored.slice(0, topK);
       } catch (e) {
         console.error("Qdrant 检索失败:", e);
-        return [];
       }
     }
 
-    // =============== 原生 IndexedDB 检索模式 ===============
-    // 如果之前开启了 Qdrant 模式，本地条目的 embedding 为 null，需要过滤掉，防止计算报错
+    return this.searchLocalSimilar(projectId, queryVec, topK, filters);
+  },
+
+  async searchLocalSimilar(projectId, queryVec, topK = 15, filters = {}) {
     const items = (await this.getItemsWithEmbedding(projectId)).filter(it => it.embedding);
     if (items.length === 0) return [];
     
@@ -294,30 +314,7 @@ export const VectorStore = {
       return { item, score };
     });
     
-    // 元数据规则过滤
-    if (filters.fileId) {
-      // 同文件加权（得分 x 1.2）
-      scored = scored.map(s => ({
-        ...s,
-        score: s.item.fileId === filters.fileId ? s.score * 1.2 : s.score
-      }));
-    }
-    
-    if (filters.minStage) {
-      scored = scored.filter(s => s.item.stage >= filters.minStage);
-    }
-    
-    if (filters.maxLenRatio && filters.queryLen) {
-      // 过滤长度差异过大的(原文长度比)
-      scored = scored.filter(s => {
-        const ratio = s.item.original.length / filters.queryLen;
-        return ratio >= (1 / filters.maxLenRatio) && ratio <= filters.maxLenRatio;
-      });
-    }
-    
-    // 按分数排序取 Top-K
-    scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, topK);
+    return applyMetadataFilters(scored, filters).slice(0, topK);
   },
 
   /**
@@ -382,6 +379,39 @@ export const VectorStore = {
         await QdrantClient.deletePointsByProjectId(settings.qdrantUrl, settings.qdrantApiKey, projectId);
       } catch (e) {
         console.warn("清理 Qdrant 失败:", e);
+      }
+    }
+  },
+
+  async deleteMissingProjectItems(projectId, keepIds) {
+    const keepIdSet = new Set(Array.from(keepIds || []).map(String));
+    const items = await getProjectItems(projectId);
+    const staleIds = items
+      .map(item => item.id)
+      .filter(id => !keepIdSet.has(String(id)));
+
+    if (staleIds.length === 0) return;
+
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+
+    for (const id of staleIds) {
+      store.delete(id);
+    }
+
+    await new Promise((resolve, reject) => {
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+
+    const settings = Storage.getSettings();
+    if (settings.qdrantEnabled && settings.qdrantUrl) {
+      try {
+        const { QdrantClient } = await import('../api/qdrant.js');
+        await QdrantClient.deletePoints(settings.qdrantUrl, settings.qdrantApiKey, staleIds);
+      } catch (e) {
+        console.warn("Qdrant 过期点清理失败:", e);
       }
     }
   },

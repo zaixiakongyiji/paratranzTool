@@ -211,7 +211,7 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
     }
 
     listEl.innerHTML = displayList.map(item => {
-      const isFinished = item.stage === 1;
+      const isFinished = item.stage >= 1;
       return `
         <div class="string-item" data-idx="${item.originalIndex}" style="padding: 0.8rem; border-bottom: 1px solid var(--border-color); cursor: pointer; border-radius: 4px; ${isFinished ? 'opacity: 0.6' : ''}">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">

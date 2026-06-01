@@ -1,24 +1,13 @@
 export function initRouter() {
-  const routerView = document.getElementById('router-view');
-  const header = document.getElementById('header');
-
-  header.innerHTML = `
-    <h2>ParaTranz 残疾版</h2>
-    <nav>
-      <button class="btn" id="nav-projects">项目</button>
-      <button class="btn" id="nav-settings">设置</button>
-    </nav>
-  `;
-
-  document.getElementById('nav-projects').addEventListener('click', () => {
-    navigate('/projects');
-  });
-  document.getElementById('nav-settings').addEventListener('click', () => {
-    navigate('/settings');
-  });
+  const logo = document.getElementById('logo');
+  if (logo) {
+    logo.addEventListener('click', () => {
+      navigate('/projects');
+    });
+  }
 
   // 初始导航
-  const handleHashChange = () => navigate(location.hash.slice(1) || '/settings', true); // Pass true to indicate it's from hashchange
+  const handleHashChange = () => navigate(location.hash.slice(1) || '/settings', true);
   window.addEventListener('hashchange', handleHashChange);
   handleHashChange();
 }

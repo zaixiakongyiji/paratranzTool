@@ -59,6 +59,7 @@ export const RAG = {
     const uniqueMap = new Map();
     allStrings.forEach(s => uniqueMap.set(s.id, s));
     allStrings = Array.from(uniqueMap.values());
+    await VectorStore.deleteMissingProjectItems(projectId, uniqueMap.keys());
     
     if (onProgress) onProgress('saving', `正在写入本地数据库 (${allStrings.length} 条)...`);
     

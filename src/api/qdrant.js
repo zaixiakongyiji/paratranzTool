@@ -138,5 +138,22 @@ export const QdrantClient = {
     if (res.status === 404) return true; // Collection not created
     if (!res.ok) throw new Error(`Qdrant 清理失败: ${await res.text()}`);
     return true;
+  },
+
+  async deletePoints(baseUrl, apiKey, ids) {
+    if (!ids || ids.length === 0) return true;
+
+    const url = `${baseUrl.replace(/\/$/, '')}/collections/paratranz_rag/points/delete?wait=true`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: this.getHeaders(apiKey),
+      body: JSON.stringify({
+        points: ids
+      })
+    });
+
+    if (res.status === 404) return true;
+    if (!res.ok) throw new Error(`Qdrant 删除指定点失败: ${await res.text()}`);
+    return true;
   }
 };

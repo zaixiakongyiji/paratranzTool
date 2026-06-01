@@ -90,7 +90,7 @@ export async function render(container, query) {
             <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; flex-shrink: 0;">
               <div style="display: flex; align-items: center; gap: 0.8rem;">
                 <button id="btn-back-header" class="btn btn-sm" title="返回项目列表" style="padding: 0.4rem 0.6rem;"><i class="fas fa-arrow-left"></i> 返回</button>
-                <h2 style="font-size: 1.1rem; margin: 0;">${project.name || '未知项目'} <span style="font-size: 0.85rem; color: var(--text-secondary); font-weight: normal;">(ID: ${projectId})</span></h2>
+                <h2 style="font-size: 1.1rem; margin: 0;">${escapeHtml(project.name || '未知项目')} <span style="font-size: 0.85rem; color: var(--text-secondary); font-weight: normal;">(ID: ${escapeHtml(String(projectId))})</span></h2>
               </div>
               <div style="display: flex; gap: 0.5rem;">
                 <button id="btn-sync-rag" class="btn btn-sm" title="同步语料库"><i class="fas fa-sync-alt"></i> 同步</button>
@@ -116,9 +116,9 @@ export async function render(container, query) {
                 
                 return `
                 <div class="folder-group glass-panel" style="padding: 0; border: 1px solid var(--border-color); overflow: hidden; border-radius: 8px;">
-                  <div class="folder-header" style="padding: 0.6rem 1rem; cursor: pointer; display: flex; align-items: center; background: rgba(255,255,255,0.02); hover: background: rgba(255,255,255,0.04);">
+                  <div class="folder-header" style="padding: 0.6rem 1rem; cursor: pointer; display: flex; align-items: center; background: rgba(255,255,255,0.02);">
                     <i class="fas fa-chevron-right folder-arrow" style="margin-right: 0.6rem; transition: transform 0.2s; font-size: 0.75rem; color: var(--text-secondary); ${(currentFilter !== 'all') ? 'transform: rotate(90deg);' : ''}"></i>
-                    <div style="flex: 1; font-weight: 500; font-size: 0.9rem;">${g.name} <span style="font-weight: normal; font-size: 0.8rem; color: var(--text-secondary); margin-left: 0.4rem;">${filteredFiles.length}</span></div>
+                    <div style="flex: 1; font-weight: 500; font-size: 0.9rem;">${escapeHtml(g.name)} <span style="font-weight: normal; font-size: 0.8rem; color: var(--text-secondary); margin-left: 0.4rem;">${filteredFiles.length}</span></div>
                     <div style="display: flex; align-items: center; gap: 0.8rem;">
                       <div class="mini-progress" style="width: 50px; height: 3px; background: var(--bg-color); border-radius: 2px; overflow: hidden;">
                         <div style="width: ${g.percent}%; height: 100%; background: var(--accent-color);"></div>
@@ -133,7 +133,7 @@ export async function render(container, query) {
                         <div style="flex: 1; min-width: 0;">
                           <div style="font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem;">
                             <i class="far fa-file-code" style="color: var(--text-secondary); font-size: 0.75rem;"></i>
-                            <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${f.name.split('/').pop()}</span>
+                            <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(f.name.split('/').pop())}</span>
                             ${f.isDone ? '<i class="fas fa-check-circle" style="color: var(--success-color); font-size: 0.75rem;"></i>' : ''}
                           </div>
                         </div>
@@ -245,4 +245,13 @@ export async function render(container, query) {
   } catch (error) {
     container.innerHTML = `<div class="glass-panel" style="color: var(--danger-color)">加载文件失败: ${error.message}</div>`;
   }
+}
+
+function escapeHtml(unsafe) {
+  return (unsafe || '')
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }

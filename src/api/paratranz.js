@@ -43,10 +43,34 @@ class ParaTranzClient {
   async getProject(projectId) { return await this._request(`/projects/${projectId}`); }
   async getFiles(projectId) { return await this._request(`/projects/${projectId}/files`); }
   async getStrings(projectId, fileId = null, stage = 0) {
-    let url = `/projects/${projectId}/strings?stage=${stage}&pageSize=100`;
-    if (fileId) url += `&file=${fileId}`;
-    const res = await this._request(url);
-    return res.results || [];
+    const pageSize = 100;
+    const results = [];
+    let page = 1;
+
+    while (true) {
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(pageSize)
+      });
+
+      if (stage !== null && stage !== undefined && stage !== '') {
+        params.set('stage', String(stage));
+      }
+      if (fileId) {
+        params.set('file', String(fileId));
+      }
+
+      const res = await this._request(`/projects/${projectId}/strings?${params.toString()}`);
+      const pageResults = res.results || [];
+      results.push(...pageResults);
+
+      if (pageResults.length < pageSize) {
+        break;
+      }
+      page += 1;
+    }
+
+    return results;
   }
   async updateString(projectId, stringId, translation, stage = 1) {
     return await this._request(`/projects/${projectId}/strings/${stringId}`, {
