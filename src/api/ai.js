@@ -42,7 +42,7 @@ export const AIClient = {
     }
   },
 
-  async translateSingle({ original, terms = [], systemPrompt, suggestion, references, previousResponse }) {
+  async translateSingle({ original, terms = [], systemPrompt, suggestion, references, previousResponse, previousText, nextText }) {
     const settings = Storage.getSettings();
     if (!settings.aiApiKey) throw new Error('未配置 AI API Key，请前往设置页修改。');
 
@@ -64,6 +64,14 @@ export const AIClient = {
 
     const finalSystemPrompt = (systemPrompt || settings.aiPrompt || "你是一个专业翻译。") + termContext + refContext;
     const suggestionText = suggestion ? `\n\n用户对这句原文的翻译提出了特别的修改建议/要求，请在这次重新翻译中严格遵循：\n【用户建议】：${suggestion}` : '';
+
+    // 拼装上下文信息（前后句）
+    let contextInfo = '';
+    if (previousText || nextText) {
+      contextInfo = '\n\n【上下文参考】（仅供理解语境，不需要翻译这些内容）：';
+      if (previousText) contextInfo += `\n上一句：${previousText}`;
+      if (nextText) contextInfo += `\n下一句：${nextText}`;
+    }
     
     const userPrompt = `请将以下文本翻译成中文，提供4种不同风格的翻译版本。每一版翻译的结果必须直接用中文方括号【】包裹。
 绝对不要添加“译文1”、“版本1”等任何多余的说明性文字，也不要在【】外附加任何文本。【】内必须且只能是翻译后的纯文本。
@@ -76,7 +84,7 @@ export const AIClient = {
 【这是第二种风格的翻译结果...】
 【这是第三种风格的翻译结果...】
 【这是第四种风格的翻译结果...】
-
+${contextInfo}
 原文：${original}${suggestionText}`;
 
     try {

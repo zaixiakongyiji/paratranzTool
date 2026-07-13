@@ -17,9 +17,13 @@ export async function render(container, query) {
     container.innerHTML = `<div style="text-align:center; padding: 2rem;">加载词条数据中...</div>`;
 
     try {
-      let [ptTerms, strings] = await Promise.all([
+      let [ptTerms, strings, allFileStrings] = await Promise.all([
         paraTranzApi.getTerms(projectId).catch(() => []), 
-        paraTranzApi.getStrings(projectId, fileId, currentStage === 'all' ? null : currentStage)
+        paraTranzApi.getStrings(projectId, fileId, currentStage === 'all' ? null : currentStage),
+        // 额外请求当前文件全量词条，用于 AI 翻译时定位上下文（筛选视图下避免上下文断裂）
+        currentStage !== 'all'
+          ? paraTranzApi.getStrings(projectId, fileId, null).catch(() => null)
+          : Promise.resolve(null)
       ]);
     const localTerms = Storage.getLocalGlossary();
     
@@ -37,18 +41,20 @@ export async function render(container, query) {
     }));
 
     strings = strings || [];
+    // stage=all 时全量列表即 strings 本身，无需额外请求
+    const allStrings = allFileStrings || strings;
     
     // 进入工作台，添加特定类名以启用三列独立布局布局
     document.body.classList.add('translate-mode');
     
-    renderWorkbench(container, projectId, fileId, strings, terms, currentStage);
+    renderWorkbench(container, projectId, fileId, strings, terms, currentStage, allStrings);
   } catch (error) {
     document.body.classList.remove('translate-mode');
     container.innerHTML = `<div class="glass-panel" style="color: var(--danger-color)">初始化失败 ${error.message}</div>`;
   }
 }
 
-function renderWorkbench(container, projectId, fileId, strings, terms, currentStage) {
+function renderWorkbench(container, projectId, fileId, strings, terms, currentStage, allStrings) {
   let currentIndex = -1;
   let sortOrder = 'none'; // 'none', 'asc', 'desc'
   let currentReferences = []; // RAG 检索到的参考翻译
@@ -620,6 +626,11 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
         if (!regex) return false;
         return regex.test(str.original);
       });
+
+      // 从全量词条列表中定位当前词条的前后句，作为 AI 翻译的上下文
+      const allIdx = allStrings.findIndex(s => s.id === str.id);
+      const previousText = allIdx > 0 ? allStrings[allIdx - 1].original : null;
+      const nextText = (allIdx !== -1 && allIdx < allStrings.length - 1) ? allStrings[allIdx + 1].original : null;
       
       try {
         const result = await AIClient.translateSingle({ 
@@ -627,7 +638,9 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
           terms: matchedTerms, 
           suggestion, 
           references: currentReferences,
-          previousResponse: suggestion ? lastAiResponse : null 
+          previousResponse: suggestion ? lastAiResponse : null,
+          previousText,
+          nextText
         });
         
         lastAiResponse = result; // 记录原始响应，供下一轮纠错（修改建议）使用

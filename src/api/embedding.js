@@ -47,11 +47,9 @@ export const EmbeddingClient = {
       const batch = texts.slice(i, i + batchSize);
       
       if (isGemini) {
-        // Gemini 逐条处理（不支持原生批量）
-        for (const text of batch) {
-          const vec = await this._embedGemini(baseUrl, settings.embeddingApiKey, settings.embeddingModel, text);
-          results.push(vec);
-        }
+        // Gemini 批量处理
+        const vecs = await this._embedGeminiBatch(baseUrl, settings.embeddingApiKey, settings.embeddingModel, batch);
+        results.push(...vecs);
       } else {
         // OpenAI 支持批量
         const vecs = await this._embedOpenAIBatch(baseUrl, settings.embeddingApiKey, settings.embeddingModel, batch);
@@ -142,5 +140,29 @@ export const EmbeddingClient = {
     
     const data = await response.json();
     return data.embedding.values;
+  },
+
+  async _embedGeminiBatch(baseUrl, apiKey, model, texts) {
+    const modelName = model || 'text-embedding-004';
+    const url = `${baseUrl}/models/${modelName}:batchEmbedContents?key=${apiKey}`;
+    
+    const requests = texts.map(text => ({
+      model: `models/${modelName}`,
+      content: { parts: [{ text }] }
+    }));
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requests })
+    });
+    
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`Gemini 批量 Embedding 请求失败: ${response.status} - ${err}`);
+    }
+    
+    const data = await response.json();
+    return (data.embeddings || []).map(e => e.values);
   }
 };

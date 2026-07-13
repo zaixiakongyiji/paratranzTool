@@ -1,0 +1,194 @@
+diff --git a/src/api/ai.js b/src/api/ai.js
+index 8c2869b..de7d9b5 100644
+--- a/src/api/ai.js
++++ b/src/api/ai.js
+@@ -42,7 +42,7 @@ export const AIClient = {
+     }
+   },
+ 
+-  async translateSingle({ original, terms = [], systemPrompt, suggestion, references, previousResponse }) {
++  async translateSingle({ original, terms = [], systemPrompt, suggestion, references, previousResponse, previousText, nextText }) {
+     const settings = Storage.getSettings();
+     if (!settings.aiApiKey) throw new Error('未配置 AI API Key，请前往设置页修改。');
+ 
+@@ -64,6 +64,14 @@ export const AIClient = {
+ 
+     const finalSystemPrompt = (systemPrompt || settings.aiPrompt || "你是一个专业翻译。") + termContext + refContext;
+     const suggestionText = suggestion ? `\n\n用户对这句原文的翻译提出了特别的修改建议/要求，请在这次重新翻译中严格遵循：\n【用户建议】：${suggestion}` : '';
++
++    // 拼装上下文信息（前后句）
++    let contextInfo = '';
++    if (previousText || nextText) {
++      contextInfo = '\n\n【上下文参考】（仅供理解语境，不需要翻译这些内容）：';
++      if (previousText) contextInfo += `\n上一句：${previousText}`;
++      if (nextText) contextInfo += `\n下一句：${nextText}`;
++    }
+     
+     const userPrompt = `请将以下文本翻译成中文，提供4种不同风格的翻译版本。每一版翻译的结果必须直接用中文方括号【】包裹。
+ 绝对不要添加“译文1”、“版本1”等任何多余的说明性文字，也不要在【】外附加任何文本。【】内必须且只能是翻译后的纯文本。
+@@ -76,7 +84,7 @@ export const AIClient = {
+ 【这是第二种风格的翻译结果...】
+ 【这是第三种风格的翻译结果...】
+ 【这是第四种风格的翻译结果...】
+-
++${contextInfo}
+ 原文：${original}${suggestionText}`;
+ 
+     try {
+diff --git a/src/api/embedding.js b/src/api/embedding.js
+index e4b1db0..695b1a6 100644
+--- a/src/api/embedding.js
++++ b/src/api/embedding.js
+@@ -47,11 +47,9 @@ export const EmbeddingClient = {
+       const batch = texts.slice(i, i + batchSize);
+       
+       if (isGemini) {
+-        // Gemini 逐条处理（不支持原生批量）
+-        for (const text of batch) {
+-          const vec = await this._embedGemini(baseUrl, settings.embeddingApiKey, settings.embeddingModel, text);
+-          results.push(vec);
+-        }
++        // Gemini 批量处理
++        const vecs = await this._embedGeminiBatch(baseUrl, settings.embeddingApiKey, settings.embeddingModel, batch);
++        results.push(...vecs);
+       } else {
+         // OpenAI 支持批量
+         const vecs = await this._embedOpenAIBatch(baseUrl, settings.embeddingApiKey, settings.embeddingModel, batch);
+@@ -142,5 +140,29 @@ export const EmbeddingClient = {
+     
+     const data = await response.json();
+     return data.embedding.values;
++  },
++
++  async _embedGeminiBatch(baseUrl, apiKey, model, texts) {
++    const modelName = model || 'text-embedding-004';
++    const url = `${baseUrl}/models/${modelName}:batchEmbedContents?key=${apiKey}`;
++    
++    const requests = texts.map(text => ({
++      model: `models/${modelName}`,
++      content: { parts: [{ text }] }
++    }));
++
++    const response = await fetch(url, {
++      method: 'POST',
++      headers: { 'Content-Type': 'application/json' },
++      body: JSON.stringify({ requests })
++    });
++    
++    if (!response.ok) {
++      const err = await response.text();
++      throw new Error(`Gemini 批量 Embedding 请求失败: ${response.status} - ${err}`);
++    }
++    
++    const data = await response.json();
++    return (data.embeddings || []).map(e => e.values);
+   }
+ };
+diff --git a/src/pages/translate.js b/src/pages/translate.js
+index 71af0ec..c7daf80 100644
+--- a/src/pages/translate.js
++++ b/src/pages/translate.js
+@@ -17,9 +17,13 @@ export async function render(container, query) {
+     container.innerHTML = `<div style="text-align:center; padding: 2rem;">加载词条数据中...</div>`;
+ 
+     try {
+-      let [ptTerms, strings] = await Promise.all([
++      let [ptTerms, strings, allFileStrings] = await Promise.all([
+         paraTranzApi.getTerms(projectId).catch(() => []), 
+-        paraTranzApi.getStrings(projectId, fileId, currentStage === 'all' ? null : currentStage)
++        paraTranzApi.getStrings(projectId, fileId, currentStage === 'all' ? null : currentStage),
++        // 额外请求当前文件全量词条，用于 AI 翻译时定位上下文（筛选视图下避免上下文断裂）
++        currentStage !== 'all'
++          ? paraTranzApi.getStrings(projectId, fileId, null)
++          : Promise.resolve(null)
+       ]);
+     const localTerms = Storage.getLocalGlossary();
+     
+@@ -37,18 +41,20 @@ export async function render(container, query) {
+     }));
+ 
+     strings = strings || [];
++    // stage=all 时全量列表即 strings 本身，无需额外请求
++    const allStrings = allFileStrings || strings;
+     
+     // 进入工作台，添加特定类名以启用三列独立布局布局
+     document.body.classList.add('translate-mode');
+     
+-    renderWorkbench(container, projectId, fileId, strings, terms, currentStage);
++    renderWorkbench(container, projectId, fileId, strings, terms, currentStage, allStrings);
+   } catch (error) {
+     document.body.classList.remove('translate-mode');
+     container.innerHTML = `<div class="glass-panel" style="color: var(--danger-color)">初始化失败 ${error.message}</div>`;
+   }
+ }
+ 
+-function renderWorkbench(container, projectId, fileId, strings, terms, currentStage) {
++function renderWorkbench(container, projectId, fileId, strings, terms, currentStage, allStrings) {
+   let currentIndex = -1;
+   let sortOrder = 'none'; // 'none', 'asc', 'desc'
+   let currentReferences = []; // RAG 检索到的参考翻译
+@@ -620,6 +626,11 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
+         if (!regex) return false;
+         return regex.test(str.original);
+       });
++
++      // 从全量词条列表中定位当前词条的前后句，作为 AI 翻译的上下文
++      const allIdx = allStrings.findIndex(s => s.id === str.id);
++      const previousText = allIdx > 0 ? allStrings[allIdx - 1].original : null;
++      const nextText = allIdx < allStrings.length - 1 ? allStrings[allIdx + 1].original : null;
+       
+       try {
+         const result = await AIClient.translateSingle({ 
+@@ -627,7 +638,9 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
+           terms: matchedTerms, 
+           suggestion, 
+           references: currentReferences,
+-          previousResponse: suggestion ? lastAiResponse : null 
++          previousResponse: suggestion ? lastAiResponse : null,
++          previousText,
++          nextText
+         });
+         
+         lastAiResponse = result; // 记录原始响应，供下一轮纠错（修改建议）使用
+diff --git a/src/utils/rag.js b/src/utils/rag.js
+index 2a22110..6b22126 100644
+--- a/src/utils/rag.js
++++ b/src/utils/rag.js
+@@ -116,7 +116,7 @@ export const RAG = {
+               onProgress('embedding', `向量化进度: ${currentTotalDone}/${pending.length}`);
+             }
+           },
+-          10, // 接口调用层级的并发
++          50, // 接口调用层级的批处理大小（Gemini API 最大支持 100）
+           300 // 稍微降低延迟提高效率
+         );
+       } catch (e) {
+diff --git a/src/utils/vectorStore.js b/src/utils/vectorStore.js
+index d6a41ba..d30d533 100644
+--- a/src/utils/vectorStore.js
++++ b/src/utils/vectorStore.js
+@@ -106,6 +106,9 @@ export const VectorStore = {
+     for (const item of items) {
+       const existing = existingMap.get(item.id);
+       
++      // 判断原文或译文是否发生了实质性修改
++      const isModified = existing && (existing.original !== item.original || existing.translation !== item.translation);
++      
+       store.put({
+         id: item.id,
+         projectId: String(projectId),
+@@ -115,10 +118,10 @@ export const VectorStore = {
+         fileName: item.fileName || '',
+         stage: item.stage,
+         updatedAt: item.updatedAt,
+-        // 保留已有向量，或标记无向量
+-        embedding: existing?.embedding || null,
+-        embeddingModel: existing?.embeddingModel || null,
+-        hasEmbedding: existing?.hasEmbedding || 0
++        // 如果发生了修改，强制重置 embedding 标记为 0，以便重新触发向量化和更新远端 Payload
++        embedding: isModified ? null : (existing?.embedding || null),
++        embeddingModel: isModified ? null : (existing?.embeddingModel || null),
++        hasEmbedding: isModified ? 0 : (existing?.hasEmbedding || 0)
+       });
+     }
+     

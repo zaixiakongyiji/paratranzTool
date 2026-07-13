@@ -106,6 +106,9 @@ export const VectorStore = {
     for (const item of items) {
       const existing = existingMap.get(item.id);
       
+      // 判断原文或译文是否发生了实质性修改
+      const isModified = existing && (existing.original !== item.original || existing.translation !== item.translation);
+      
       store.put({
         id: item.id,
         projectId: String(projectId),
@@ -115,10 +118,10 @@ export const VectorStore = {
         fileName: item.fileName || '',
         stage: item.stage,
         updatedAt: item.updatedAt,
-        // 保留已有向量，或标记无向量
-        embedding: existing?.embedding || null,
-        embeddingModel: existing?.embeddingModel || null,
-        hasEmbedding: existing?.hasEmbedding || 0
+        // 如果发生了修改，强制重置 embedding 标记为 0，以便重新触发向量化和更新远端 Payload
+        embedding: isModified ? null : (existing?.embedding || null),
+        embeddingModel: isModified ? null : (existing?.embeddingModel || null),
+        hasEmbedding: isModified ? 0 : (existing?.hasEmbedding || 0)
       });
     }
     

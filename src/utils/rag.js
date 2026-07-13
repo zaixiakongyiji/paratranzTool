@@ -116,7 +116,7 @@ export const RAG = {
               onProgress('embedding', `向量化进度: ${currentTotalDone}/${pending.length}`);
             }
           },
-          10, // 接口调用层级的并发
+          50, // 接口调用层级的批处理大小（Gemini API 最大支持 100）
           300 // 稍微降低延迟提高效率
         );
       } catch (e) {
