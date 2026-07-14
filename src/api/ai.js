@@ -42,7 +42,7 @@ export const AIClient = {
     }
   },
 
-  async translateSingle({ original, terms = [], systemPrompt, suggestion, references, previousResponse, previousText, nextText }) {
+  async translateSingle({ original, terms = [], systemPrompt, suggestion, references, previousResponse, previousText, nextText, signal }) {
     const settings = Storage.getSettings();
     if (!settings.aiApiKey) throw new Error('未配置 AI API Key，请前往设置页修改。');
 
@@ -104,7 +104,8 @@ ${contextInfo}
             contents,
             systemInstruction: { parts: [{ text: finalSystemPrompt }] },
             generationConfig: { temperature: 0.7 }
-          })
+          }),
+          signal
         });
 
         if (!response.ok) {
@@ -146,7 +147,8 @@ ${contextInfo}
             model: settings.aiModel || 'gpt-3.5-turbo',
             messages,
             temperature: 0.7
-          })
+          }),
+          signal
         });
 
         if (!response.ok) {

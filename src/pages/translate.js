@@ -3,6 +3,8 @@ import { AIClient } from '../api/ai.js';
 import { Storage } from '../utils/storage.js';
 import { showToast } from '../components/toast.js';
 import { navigate } from '../router.js';
+import { validateTranslation } from '../utils/validation.js';
+import { showValidationModal } from '../components/validationModal.js';
 
 export async function render(container, query) {
   const projectId = query.get('projectId');
@@ -88,16 +90,6 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
         <div class="glass-panel" style="flex: 1; min-width: 0; display: flex; flex-direction: column; overflow-y: auto; padding-right: 0.8rem;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-shrink: 0;">
             <h3 style="margin: 0; font-size: 1.1rem;">工作台</h3>
-            <div style="display: flex; gap: 1rem;">
-              <label style="display: flex; align-items: center; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer;" title="提交后切换到下一条时自动触发 AI 翻译">
-                <input type="checkbox" id="toggle-auto-translate" style="margin-right: 5px;">
-                自动翻译
-              </label>
-              <label style="display: flex; align-items: center; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer;" title="在候选面板选择译文后自动提交并切换下一条">
-                <input type="checkbox" id="toggle-auto-save" style="margin-right: 5px;">
-                自动保存
-              </label>
-            </div>
           </div>
           <div style="display: flex; flex-direction: column; gap: 1rem; flex-shrink: 0; padding-bottom: 1rem;">
             <div style="display: flex; flex-direction: column;">
@@ -121,7 +113,7 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
               </div>
             </div>
 
-            <div id="ai-candidates-panel" style="display: none; flex-direction: column; max-height: 35vh; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.8rem; background: var(--bg-color); flex-shrink: 0;">
+            <div id="ai-candidates-panel" style="display: none; flex-direction: column; max-height: 55vh; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.8rem; background: var(--bg-color); flex-shrink: 0;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-shrink: 0;">
                 <div style="display: flex; align-items: center; gap: 0.5rem;">
                   <label style="color: var(--accent-color); font-size: 0.85rem; font-weight: 600;">AI 候选译文</label>
@@ -155,7 +147,20 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
 
             <div style="display: flex; flex-direction: column; flex-shrink: 0;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-shrink: 0;">
-                <label style="color: var(--text-secondary); font-size: 0.9rem;">译文 (支持手动编辑)</label>
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                  <label style="color: var(--text-secondary); font-size: 0.9rem; margin-right: 0.5rem;">译文 (支持手动编辑)</label>
+                  <label style="display: flex; align-items: center; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; white-space: nowrap;" title="提交后切换到下一条时自动触发 AI 翻译">
+                    <input type="checkbox" id="toggle-auto-translate" style="margin-right: 5px;">
+                    自动翻译
+                  </label>
+                  <label style="display: flex; align-items: center; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; white-space: nowrap;" title="在候选面板选择译文后自动提交并切换下一条">
+                    <input type="checkbox" id="toggle-auto-save" style="margin-right: 5px;">
+                    自动保存
+                  </label>
+                  <button id="btn-cancel-translate" class="btn btn-sm" disabled style="background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); padding: 0.1rem 0.5rem; cursor: not-allowed; transition: all 0.2s; white-space: nowrap;" title="中止当前 AI 翻译流程">
+                    <i class="fas fa-times"></i> 中止翻译
+                  </button>
+                </div>
                 <button id="btn-submit" class="btn btn-primary btn-sm" style="padding: 0.3rem 1rem; font-size: 0.85rem;">提交至服务器并保存 (下一条)</button>
               </div>
               <textarea id="text-translation" placeholder="输入译文..." style="min-height: 120px; resize: none; overflow-y: hidden; font-size: 1.1rem; line-height: 1.6; padding: 1rem; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); transition: height 0.1s ease;"></textarea>
@@ -395,11 +400,21 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
 
   function initWorkbenchLogic() {
     const textTranslation = document.getElementById('text-translation');
+    let abortController = null;
     
     // 初始化并绑定自动翻译、自动保存开关
     const toggleAutoTranslate = document.getElementById('toggle-auto-translate');
     const toggleAutoSave = document.getElementById('toggle-auto-save');
+    const btnCancelTranslate = document.getElementById('btn-cancel-translate');
     const settings = Storage.getSettings();
+    
+    if (btnCancelTranslate) {
+      btnCancelTranslate.addEventListener('click', () => {
+        if (abortController) {
+          abortController.abort();
+        }
+      });
+    }
     
     if (toggleAutoTranslate) {
       toggleAutoTranslate.checked = !!settings.autoTranslate;
@@ -527,9 +542,7 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
 
     function renderCandidateCards(containerEl, candidates) {
       containerEl.innerHTML = candidates.map((text, i) => `
-        <div class="ai-card" data-ci="${i}" style="padding: 0.6rem; border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; transition: all 0.15s;">
-          <span style="color: var(--accent-color); font-weight:600;">#${i+1}</span> ${escapeHtml(text)}
-        </div>
+        <div class="ai-card" data-ci="${i}" style="padding: 0.6rem; border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; transition: all 0.15s; white-space: pre-wrap; line-height: 1.6;">${escapeHtml(text)}</div>
       `).join('');
       containerEl.querySelectorAll('.ai-card').forEach((card, i) => {
         card.addEventListener('click', () => {
@@ -645,14 +658,36 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
 
     document.getElementById('btn-get-rag').addEventListener('click', doFetchRag);
 
+    let isTranslating = false;
     async function doAiTranslate(suggestion = null) {
-      if (currentIndex === -1) return;
+      if (currentIndex === -1 || isTranslating) return;
+      isTranslating = true;
+      
+      abortController = new AbortController();
+      const btnCancel = document.getElementById('btn-cancel-translate');
+      if (btnCancel) {
+        btnCancel.disabled = false;
+        btnCancel.style.borderColor = 'var(--danger-color)';
+        btnCancel.style.color = 'var(--danger-color)';
+        btnCancel.style.cursor = 'pointer';
+      }
+      
       const str = strings[currentIndex];
       const btn = document.getElementById('btn-ai-translate');
+      const btnSuggest = document.getElementById('btn-submit-suggest');
       const panel = document.getElementById('ai-candidates-panel');
       const listEl = document.getElementById('ai-candidates-list');
       const prevBtn = document.getElementById('btn-show-prev');
       const prevItemsEl = document.getElementById('ai-prev-items');
+      
+      btn.disabled = true;
+      if (btnSuggest) btnSuggest.disabled = true;
+      
+      if (suggestion && btnSuggest) {
+        btnSuggest.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 重新生成中...';
+      } else {
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> AI 翻译中...';
+      }
       
       // 如果还没查参考，顺手查一下
       const settings = Storage.getSettings();
@@ -660,8 +695,6 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
         await doFetchRag();
       }
 
-      btn.disabled = true;
-      btn.innerText = suggestion ? '获取建议修改中...' : 'AI 翻译中...';
       const textTranslation = document.getElementById('text-translation');
       
       // 过滤术语表：只将真正在当前原文中出现的术语传递给 AI，防止全字典下发带来 token 爆炸和多义词干扰
@@ -684,7 +717,8 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
           references: currentReferences,
           previousResponse: suggestion ? lastAiResponse : null,
           previousText,
-          nextText
+          nextText,
+          signal: abortController.signal
         });
         
         lastAiResponse = result; // 记录原始响应，供下一轮纠错（修改建议）使用
@@ -721,10 +755,24 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
           panel.style.display = 'flex';
         }
       } catch (e) {
-        showToast(e.message, 'error');
+        if (e.name === 'AbortError') {
+          showToast('翻译已中止', 'info');
+        } else {
+          showToast(e.message, 'error');
+        }
       } finally {
+        isTranslating = false;
+        abortController = null;
+        if (btnCancel) {
+          btnCancel.disabled = true;
+          btnCancel.style.borderColor = 'var(--border-color)';
+          btnCancel.style.color = 'var(--text-secondary)';
+          btnCancel.style.cursor = 'not-allowed';
+        }
         btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-robot"></i> AI 执行翻译';
+        if (btnSuggest) btnSuggest.disabled = false;
+        btn.innerHTML = '<i class="fas fa-robot"></i> AI 翻译';
+        if (btnSuggest) btnSuggest.innerHTML = '<i class="fas fa-paper-plane"></i> 重新生成';
       }
     }
 
@@ -763,6 +811,13 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
       const translated = textTranslation.value.trim();
       if (!translated) return showToast('翻译不能为空', 'error');
 
+      // 保存前检查
+      const issues = validateTranslation(str.original, translated);
+      if (issues.length > 0) {
+        const shouldContinue = await showValidationModal(issues);
+        if (!shouldContinue) return;
+      }
+
       const btn = document.getElementById('btn-submit');
       btn.disabled = true;
       try {
@@ -773,9 +828,11 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
         strings[currentIndex].updatedAt = new Date().toISOString();
         showToast('保存成功', 'success');
         renderStringList();
+        
+        const hasNext = currentIndex + 1 < strings.length;
         selectString(currentIndex + 1);
         
-        if (Storage.getSettings().autoTranslate) {
+        if (hasNext && Storage.getSettings().autoTranslate) {
           setTimeout(() => {
             const btnAi = document.getElementById('btn-ai-translate');
             if (btnAi && !btnAi.disabled) {
