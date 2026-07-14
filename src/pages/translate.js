@@ -86,7 +86,19 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
 
         <!-- 中间：编辑器 (核心自适应区) -->
         <div class="glass-panel" style="flex: 1; min-width: 0; display: flex; flex-direction: column; overflow-y: auto; padding-right: 0.8rem;">
-          <h3 style="margin-bottom: 1rem; font-size: 1.1rem; flex-shrink: 0;">工作台</h3>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-shrink: 0;">
+            <h3 style="margin: 0; font-size: 1.1rem;">工作台</h3>
+            <div style="display: flex; gap: 1rem;">
+              <label style="display: flex; align-items: center; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer;" title="提交后切换到下一条时自动触发 AI 翻译">
+                <input type="checkbox" id="toggle-auto-translate" style="margin-right: 5px;">
+                自动翻译
+              </label>
+              <label style="display: flex; align-items: center; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer;" title="在候选面板选择译文后自动提交并切换下一条">
+                <input type="checkbox" id="toggle-auto-save" style="margin-right: 5px;">
+                自动保存
+              </label>
+            </div>
+          </div>
           <div style="display: flex; flex-direction: column; gap: 1rem; flex-shrink: 0; padding-bottom: 1rem;">
             <div style="display: flex; flex-direction: column;">
               <label style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 0.5rem; display:block;">原文</label>
@@ -384,6 +396,29 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
   function initWorkbenchLogic() {
     const textTranslation = document.getElementById('text-translation');
     
+    // 初始化并绑定自动翻译、自动保存开关
+    const toggleAutoTranslate = document.getElementById('toggle-auto-translate');
+    const toggleAutoSave = document.getElementById('toggle-auto-save');
+    const settings = Storage.getSettings();
+    
+    if (toggleAutoTranslate) {
+      toggleAutoTranslate.checked = !!settings.autoTranslate;
+      toggleAutoTranslate.addEventListener('change', (e) => {
+        const s = Storage.getSettings();
+        s.autoTranslate = e.target.checked;
+        Storage.saveSettings(s);
+      });
+    }
+    
+    if (toggleAutoSave) {
+      toggleAutoSave.checked = !!settings.autoSave;
+      toggleAutoSave.addEventListener('change', (e) => {
+        const s = Storage.getSettings();
+        s.autoSave = e.target.checked;
+        Storage.saveSettings(s);
+      });
+    }
+
     textTranslation.addEventListener('input', () => autoResizeTextarea(textTranslation));
     window.addEventListener('resize', () => autoResizeTextarea(textTranslation));
 
@@ -513,6 +548,15 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
           showToast(`已${aiInsertMode === 'append' ? '追加' : '选择'}版本 #${i+1}`, 'success');
           // 选择后自动关闭面板
           document.getElementById('ai-candidates-panel').style.display = 'none';
+
+          if (Storage.getSettings().autoSave) {
+            setTimeout(() => {
+              const btnSubmit = document.getElementById('btn-submit');
+              if (btnSubmit && !btnSubmit.disabled) {
+                btnSubmit.click();
+              }
+            }, 50);
+          }
         });
       });
     }
@@ -730,6 +774,15 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
         showToast('保存成功', 'success');
         renderStringList();
         selectString(currentIndex + 1);
+        
+        if (Storage.getSettings().autoTranslate) {
+          setTimeout(() => {
+            const btnAi = document.getElementById('btn-ai-translate');
+            if (btnAi && !btnAi.disabled) {
+              btnAi.click();
+            }
+          }, 300); // 稍微延迟以保证UI切换平滑
+        }
       } catch (e) {
         showToast(e.message, 'error');
       } finally {

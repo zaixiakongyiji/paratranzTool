@@ -5,11 +5,22 @@ export const QdrantClient = {
     return headers;
   },
 
+  async _fetch(url, options) {
+    try {
+      return await fetch(url, options);
+    } catch (e) {
+      if (e instanceof TypeError && window.location.protocol === 'https:' && url.startsWith('http:')) {
+        throw new Error(`浏览器安全策略拦截了请求 (Mixed Content): 当前页面通过 HTTPS 加载，但试图访问 HTTP 的接口。请在系统设置中将 URL 改为 HTTPS，或通过 HTTP 访问当前站点。`);
+      }
+      throw e;
+    }
+  },
+
   async ensureCollection(baseUrl, apiKey, vectorSize) {
     const url = `${baseUrl.replace(/\/$/, '')}/collections/paratranz_rag`;
     const headers = this.getHeaders(apiKey);
     
-    const res = await fetch(url, { headers });
+    const res = await this._fetch(url, { headers });
     
     if (res.ok) {
         // 集合已存在，校验维度是否一致
@@ -22,7 +33,7 @@ export const QdrantClient = {
     }
     
     if (res.status === 404) {
-      const createRes = await fetch(url, {
+      const createRes = await this._fetch(url, {
         method: 'PUT',
         headers,
         body: JSON.stringify({
@@ -40,7 +51,7 @@ export const QdrantClient = {
 
   async deleteCollection(baseUrl, apiKey) {
     const url = `${baseUrl.replace(/\/$/, '')}/collections/paratranz_rag`;
-    const res = await fetch(url, {
+    const res = await this._fetch(url, {
       method: 'DELETE',
       headers: this.getHeaders(apiKey)
     });
@@ -51,7 +62,7 @@ export const QdrantClient = {
     if (!ids || ids.length === 0) return new Set();
     const url = `${baseUrl.replace(/\/$/, '')}/collections/paratranz_rag/points`;
     
-    const res = await fetch(url, {
+    const res = await this._fetch(url, {
       method: 'POST',
       headers: this.getHeaders(apiKey),
       body: JSON.stringify({
@@ -74,7 +85,7 @@ export const QdrantClient = {
     await this.ensureCollection(baseUrl, apiKey, vectorSize);
     
     const url = `${baseUrl.replace(/\/$/, '')}/collections/paratranz_rag/points?wait=true`;
-    const res = await fetch(url, {
+    const res = await this._fetch(url, {
       method: 'PUT',
       headers: this.getHeaders(apiKey),
       body: JSON.stringify({
@@ -95,7 +106,7 @@ export const QdrantClient = {
   async search(baseUrl, apiKey, projectId, vector, limit = 30) {
     const url = `${baseUrl.replace(/\/$/, '')}/collections/paratranz_rag/points/search`;
     
-    const res = await fetch(url, {
+    const res = await this._fetch(url, {
       method: 'POST',
       headers: this.getHeaders(apiKey),
       body: JSON.stringify({
@@ -122,7 +133,7 @@ export const QdrantClient = {
     const url = `${baseUrl.replace(/\/$/, '')}/collections/paratranz_rag/points/delete?wait=true`;
     
     // 不要抛出 404 错误，考虑到可能该 Collection 还未建立
-    const res = await fetch(url, {
+    const res = await this._fetch(url, {
       method: 'POST',
       headers: this.getHeaders(apiKey),
       body: JSON.stringify({
@@ -144,7 +155,7 @@ export const QdrantClient = {
     if (!ids || ids.length === 0) return true;
 
     const url = `${baseUrl.replace(/\/$/, '')}/collections/paratranz_rag/points/delete?wait=true`;
-    const res = await fetch(url, {
+    const res = await this._fetch(url, {
       method: 'POST',
       headers: this.getHeaders(apiKey),
       body: JSON.stringify({

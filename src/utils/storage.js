@@ -40,7 +40,11 @@ export const Storage = {
         rerankApiFormat: 'openai',
         rerankBaseUrl: 'https://api.siliconflow.cn/v1/rerank',
         rerankApiKey: '',
-        rerankModel: 'Qwen/Qwen3-Reranker-8B'
+        rerankModel: 'Qwen/Qwen3-Reranker-8B',
+
+        // --- 自动化工作流 ---
+        autoTranslate: false,
+        autoSave: false
     };
 
     try {
