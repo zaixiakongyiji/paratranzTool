@@ -61,7 +61,7 @@ class ParaTranzClient {
       }
 
       const res = await this._request(`/projects/${projectId}/strings?${params.toString()}`);
-      const pageResults = res.results || [];
+      const pageResults = (res && res.results) || [];
       results.push(...pageResults);
 
       if (pageResults.length < pageSize) {
@@ -82,8 +82,23 @@ class ParaTranzClient {
     return await this._concurrentUpdate(projectId, stringsUpdates);
   }
   async getTerms(projectId) {
-    const res = await this._request(`/projects/${projectId}/terms?page=1&pageSize=500`);
-    return res.results;
+    const pageSize = 500;
+    const results = [];
+    let page = 1;
+
+    while (true) {
+      // 循环拉取所有页面的术语数据
+      const res = await this._request(`/projects/${projectId}/terms?page=${page}&pageSize=${pageSize}`);
+      const pageResults = (res && res.results) || [];
+      results.push(...pageResults);
+
+      if (pageResults.length < pageSize) {
+        break;
+      }
+      page += 1;
+    }
+
+    return results;
   }
   async createTerm(projectId, termData) {
     return await this._request(`/projects/${projectId}/terms`, {

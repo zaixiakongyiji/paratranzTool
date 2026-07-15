@@ -3,7 +3,7 @@
 import { Storage } from './storage.js';
 
 const DB_NAME = 'paratranz_vector_store';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = 'translations';
 const META_STORE = 'sync_meta';
 
@@ -71,6 +71,11 @@ function openDB() {
       // 同步元数据存储
       if (!db.objectStoreNames.contains(META_STORE)) {
         db.createObjectStore(META_STORE, { keyPath: 'projectId' });
+      }
+
+      // 新增翻译记忆存储仓库，使用 id 作为联合键
+      if (!db.objectStoreNames.contains('translation_memory')) {
+        db.createObjectStore('translation_memory', { keyPath: 'id' });
       }
     };
     
@@ -176,6 +181,82 @@ export const VectorStore = {
     item.hasEmbedding = 1;
     storeWrite.put(item);
     
+    await new Promise((resolve, reject) => {
+      txWrite.oncomplete = resolve;
+      txWrite.onerror = () => reject(txWrite.error);
+    });
+  },
+
+  async setEmbeddingsBatch(list) {
+    if (!list || list.length === 0) return;
+    const settings = Storage.getSettings();
+    const db = await openDB();
+
+    // 1. 在一个 readonly 事务中批量读取出已存在的项目对象
+    const itemsMap = new Map();
+    const txRead = db.transaction(STORE_NAME, 'readonly');
+    const storeRead = txRead.objectStore(STORE_NAME);
+
+    const getPromises = list.map(listItem => {
+      return new Promise((resolve, reject) => {
+        const req = storeRead.get(listItem.id);
+        req.onsuccess = () => {
+          if (req.result) {
+            itemsMap.set(listItem.id, req.result);
+          }
+          resolve();
+        };
+        req.onerror = () => reject(req.error);
+      });
+    });
+
+    await Promise.all(getPromises);
+
+    // 2. 如果启用了 Qdrant 且 Qdrant 配置完整，将所有待向量化项的 vector 及 payload 打包构建点，批量上传 Qdrant
+    if (settings.qdrantEnabled && settings.qdrantUrl) {
+      const points = [];
+      for (const listItem of list) {
+        const item = itemsMap.get(listItem.id);
+        if (item) {
+          points.push({
+            id: item.id,
+            vector: Array.from(listItem.embedding),
+            payload: {
+              projectId: item.projectId,
+              fileId: item.fileId,
+              fileName: item.fileName,
+              original: item.original,
+              translation: item.translation,
+              stage: item.stage
+            }
+          });
+        }
+      }
+      if (points.length > 0) {
+        try {
+          const { QdrantClient } = await import('../api/qdrant.js');
+          await QdrantClient.upsertPoints(settings.qdrantUrl, settings.qdrantApiKey, points);
+        } catch (e) {
+          console.error("Qdrant 批量写入失败:", e);
+          throw e;
+        }
+      }
+    }
+
+    // 3. 在一个 readwrite 事务中，单个写事务批量 put 写入 IndexedDB，避免多次事务开销
+    const txWrite = db.transaction(STORE_NAME, 'readwrite');
+    const storeWrite = txWrite.objectStore(STORE_NAME);
+
+    for (const listItem of list) {
+      const item = itemsMap.get(listItem.id);
+      if (item) {
+        item.embedding = Array.from(listItem.embedding);
+        item.embeddingModel = listItem.modelName;
+        item.hasEmbedding = 1;
+        storeWrite.put(item);
+      }
+    }
+
     await new Promise((resolve, reject) => {
       txWrite.oncomplete = resolve;
       txWrite.onerror = () => reject(txWrite.error);
@@ -453,5 +534,108 @@ export const VectorStore = {
         req.onerror = () => reject(req.error);
       });
     }
+  },
+
+  async saveTM(projectId, original, translation) {
+    const db = await openDB();
+    const tx = db.transaction('translation_memory', 'readwrite');
+    const store = tx.objectStore('translation_memory');
+    const id = `${projectId}::${original}`;
+    store.put({
+      id,
+      projectId: String(projectId),
+      original,
+      translation,
+      lastUpdated: Date.now()
+    });
+    await new Promise((resolve, reject) => {
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  },
+
+  async searchTM(projectId, original) {
+    const db = await openDB();
+    const tx = db.transaction('translation_memory', 'readonly');
+    const store = tx.objectStore('translation_memory');
+    const id = `${projectId}::${original}`;
+    const result = await new Promise((resolve, reject) => {
+      const req = store.get(id);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+    return result ? result.translation : null;
+  },
+
+  async getAllTM(projectId) {
+    const db = await openDB();
+    const tx = db.transaction('translation_memory', 'readonly');
+    const store = tx.objectStore('translation_memory');
+    const range = IDBKeyRange.bound(`${projectId}::`, `${projectId}::\uffff`);
+    return new Promise((resolve, reject) => {
+      const req = store.getAll(range);
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
   }
 };
+
+export async function migrateTMToIndexedDB() {
+  const keysToMigrate = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith('pt_tm_')) {
+      keysToMigrate.push(key);
+    }
+  }
+
+  if (keysToMigrate.length === 0) return;
+
+  const db = await openDB();
+  
+  for (const key of keysToMigrate) {
+    const projectId = key.substring(6); // 去掉 'pt_tm_'
+    try {
+      const dataStr = localStorage.getItem(key);
+      if (!dataStr) continue;
+      
+      const tmData = JSON.parse(dataStr);
+      const entries = Object.entries(tmData);
+      
+      if (entries.length > 0) {
+        const tx = db.transaction('translation_memory', 'readwrite');
+        const store = tx.objectStore('translation_memory');
+        
+        for (const [original, val] of entries) {
+          let translation = '';
+          let lastUpdated = Date.now();
+          
+          if (val && typeof val === 'object') {
+            translation = val.translation || '';
+            lastUpdated = val.lastUpdated || Date.now();
+          } else {
+            translation = String(val);
+          }
+          
+          const id = `${projectId}::${original}`;
+          store.put({
+            id,
+            projectId: String(projectId),
+            original,
+            translation,
+            lastUpdated
+          });
+        }
+        
+        await new Promise((resolve, reject) => {
+          tx.oncomplete = resolve;
+          tx.onerror = () => reject(tx.error);
+        });
+      }
+      
+      localStorage.removeItem(key);
+    } catch (e) {
+      console.error(`迁移 TM 数据失败 (${key}):`, e);
+    }
+  }
+}

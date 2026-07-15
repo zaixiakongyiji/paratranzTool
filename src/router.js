@@ -1,3 +1,5 @@
+let currentPageModule = null;
+
 export function initRouter() {
   const logo = document.getElementById('logo');
   if (logo) {
@@ -19,6 +21,16 @@ export function navigate(path, fromHashChange = false) {
     return; // Let the hashchange listener handle the subsequent rendering
   }
 
+  // 如果存在上个页面模块且具有 destroy 方法，调用该方法
+  if (currentPageModule && typeof currentPageModule.destroy === 'function') {
+    try {
+      currentPageModule.destroy();
+    } catch (e) {
+      console.error('Error destroying page module:', e);
+    }
+    currentPageModule = null;
+  }
+
   const [pathname, queryString] = path.split('?');
   const query = new URLSearchParams(queryString || '');
   
@@ -29,12 +41,12 @@ export function navigate(path, fromHashChange = false) {
   routerView.innerHTML = `<div style="text-align:center; padding: 2rem;">加载中...</div>`;
   
   const routes = {
-    '/projects': { render: (c, q) => import('./pages/projects.js').then(m => m.render(c, q)) },
-    '/files': { render: (c, q) => import('./pages/files.js').then(m => m.render(c, q)) },
-    '/translate': { render: (c, q) => import('./pages/translate.js').then(m => m.render(c, q)) },
-    '/terms': { render: (c, q) => import('./pages/terms.js').then(m => m.render(c, q)) },
-    '/glossary': { render: (c, q) => import('./pages/glossary.js').then(m => m.render(c, q)) },
-    '/settings': { render: (c, q) => import('./pages/settings.js').then(m => m.render(c, q)) }
+    '/projects': { render: (c, q) => import('./pages/projects.js').then(m => { currentPageModule = m; return m.render(c, q); }) },
+    '/files': { render: (c, q) => import('./pages/files.js').then(m => { currentPageModule = m; return m.render(c, q); }) },
+    '/translate': { render: (c, q) => import('./pages/translate.js').then(m => { currentPageModule = m; return m.render(c, q); }) },
+    '/terms': { render: (c, q) => import('./pages/terms.js').then(m => { currentPageModule = m; return m.render(c, q); }) },
+    '/glossary': { render: (c, q) => import('./pages/glossary.js').then(m => { currentPageModule = m; return m.render(c, q); }) },
+    '/settings': { render: (c, q) => import('./pages/settings.js').then(m => { currentPageModule = m; return m.render(c, q); }) }
   };
 
   const route = routes[pathname];

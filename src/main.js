@@ -24,6 +24,11 @@ import { initRouter } from './router.js';
 window.addEventListener('DOMContentLoaded', () => {
   initRouter();
 
+  // 静默迁移 localStorage 的历史 TM 数据到 IndexedDB
+  import('./utils/vectorStore.js').then(({ migrateTMToIndexedDB }) => {
+    migrateTMToIndexedDB().catch(err => console.error("自动迁移 TM 失败:", err));
+  });
+
   // 主题切换逻辑
   const themeToggleBtn = document.getElementById('theme-toggle');
   const icon = themeToggleBtn.querySelector('i');

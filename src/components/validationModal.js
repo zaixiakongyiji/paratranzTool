@@ -138,7 +138,12 @@ export function showValidationModal(issues) {
     document.body.appendChild(overlay);
 
     // 绑定事件
+    let handleEsc;
+
     const cleanup = (result) => {
+      if (handleEsc) {
+        document.removeEventListener('keydown', handleEsc);
+      }
       overlay.style.opacity = '0';
       overlay.style.transition = 'opacity 0.15s ease';
       setTimeout(() => overlay.remove(), 150);
@@ -155,9 +160,8 @@ export function showValidationModal(issues) {
     });
 
     // ESC 键关闭
-    const handleEsc = (e) => {
+    handleEsc = (e) => {
       if (e.key === 'Escape') {
-        document.removeEventListener('keydown', handleEsc);
         cleanup(false);
       }
     };

@@ -1,5 +1,7 @@
 import { Storage } from '../utils/storage.js';
 
+const activeClickListeners = {};
+
 // 生成一个模型配置面板的 HTML 片段
 function renderModelPanel(id, title, icon, settings, prefix, options = {}) {
   const { isOptional = false, hasPrompt = false, hasRefCount = false } = options;
@@ -344,10 +346,14 @@ export function render(container) {
           };
           
           // 点击外部关闭
-          document.addEventListener('click', (e) => {
+          if (activeClickListeners[id]) {
+            document.removeEventListener('click', activeClickListeners[id]);
+          }
+          activeClickListeners[id] = (e) => {
             const wrapper = document.getElementById(`model-wrapper-${id}`);
             if (wrapper && !wrapper.contains(e.target)) dropdown.style.display = 'none';
-          });
+          };
+          document.addEventListener('click', activeClickListeners[id]);
           
           dropdown.style.display = 'block';
           input.focus();
@@ -364,4 +370,13 @@ export function render(container) {
       }
     });
   });
+}
+
+export function destroy() {
+  Object.keys(activeClickListeners).forEach(id => {
+    document.removeEventListener('click', activeClickListeners[id]);
+  });
+  for (const id in activeClickListeners) {
+    delete activeClickListeners[id];
+  }
 }

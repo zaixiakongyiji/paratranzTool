@@ -1,5 +1,7 @@
 // 本地数据存储与翻译记忆(TM)封装
 
+const tmCache = new Map();
+
 export const Storage = {
   // --- 系统配置 ---
   getSettings() {
@@ -78,26 +80,90 @@ export const Storage = {
 
   // --- 翻译记忆 TM ---
   // TM结构: { [original]: { translation, lastUpdated } }
-  getTM(projectId) {
+  async preloadTM(projectId) {
+    if (!projectId) return;
+    const pId = String(projectId);
     try {
-      const key = `pt_tm_${projectId}`;
-      const data = localStorage.getItem(key);
-      return data ? JSON.parse(data) : {};
-    } catch { return {}; }
+      const { VectorStore } = await import('./vectorStore.js');
+      const items = await VectorStore.getAllTM(projectId);
+      const projectMap = new Map();
+      for (const item of items) {
+        projectMap.set(item.original, {
+          translation: item.translation,
+          lastUpdated: item.lastUpdated
+        });
+      }
+      tmCache.set(pId, projectMap);
+    } catch (e) {
+      console.error("预加载 TM 失败:", e);
+    }
+  },
+
+  getTM(projectId) {
+    const pId = String(projectId);
+    if (!tmCache.has(pId)) {
+      try {
+        const key = `pt_tm_${pId}`;
+        const data = localStorage.getItem(key);
+        if (data) {
+          const parsed = JSON.parse(data);
+          const projectMap = new Map();
+          for (const [k, v] of Object.entries(parsed)) {
+            if (v && typeof v === 'object') {
+              projectMap.set(k, {
+                translation: v.translation || '',
+                lastUpdated: v.lastUpdated || Date.now()
+              });
+            } else {
+              projectMap.set(k, {
+                translation: String(v),
+                lastUpdated: Date.now()
+              });
+            }
+          }
+          tmCache.set(pId, projectMap);
+        } else {
+          tmCache.set(pId, new Map());
+        }
+      } catch {
+        tmCache.set(pId, new Map());
+      }
+    }
+    const projectMap = tmCache.get(pId);
+    const obj = {};
+    for (const [k, v] of projectMap.entries()) {
+      obj[k] = v;
+    }
+    return obj;
   },
 
   saveTM(projectId, original, translation) {
-    const tm = this.getTM(projectId);
-    tm[original] = {
+    const pId = String(projectId);
+    if (!tmCache.has(pId)) {
+      this.getTM(projectId);
+    }
+    const projectMap = tmCache.get(pId);
+    const lastUpdated = Date.now();
+    projectMap.set(original, {
       translation: translation,
-      lastUpdated: Date.now()
-    };
-    localStorage.setItem(`pt_tm_${projectId}`, JSON.stringify(tm));
+      lastUpdated: lastUpdated
+    });
+
+    import('./vectorStore.js').then(({ VectorStore }) => {
+      VectorStore.saveTM(projectId, original, translation).catch(err => {
+        console.error("异步保存 TM 到 IndexedDB 失败:", err);
+      });
+    });
   },
 
   searchTM(projectId, original) {
-    const tm = this.getTM(projectId);
-    return tm[original] ? tm[original].translation : null;
+    const pId = String(projectId);
+    if (!tmCache.has(pId)) {
+      this.getTM(projectId);
+    }
+    const projectMap = tmCache.get(pId);
+    const record = projectMap.get(original);
+    return record ? record.translation : null;
   },
 
   // --- 手动项目管理 ---

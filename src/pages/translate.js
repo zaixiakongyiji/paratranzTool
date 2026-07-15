@@ -6,6 +6,8 @@ import { navigate } from '../router.js';
 import { validateTranslation } from '../utils/validation.js';
 import { showValidationModal } from '../components/validationModal.js';
 
+var resizeHandler = null;
+
 export async function render(container, query) {
   const projectId = query.get('projectId');
   const fileId = query.get('fileId');
@@ -25,7 +27,9 @@ export async function render(container, query) {
         // 额外请求当前文件全量词条，用于 AI 翻译时定位上下文（筛选视图下避免上下文断裂）
         currentStage !== 'all'
           ? paraTranzApi.getStrings(projectId, fileId, null).catch(() => null)
-          : Promise.resolve(null)
+          : Promise.resolve(null),
+        // 异步预加载翻译记忆库到内存缓存中
+        Storage.preloadTM(projectId).catch(() => null)
       ]);
     const localTerms = Storage.getLocalGlossary();
     
@@ -435,7 +439,14 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
     }
 
     textTranslation.addEventListener('input', () => autoResizeTextarea(textTranslation));
-    window.addEventListener('resize', () => autoResizeTextarea(textTranslation));
+    if (resizeHandler) {
+      window.removeEventListener('resize', resizeHandler);
+    }
+    resizeHandler = () => {
+      const el = document.getElementById('text-translation');
+      if (el) autoResizeTextarea(el);
+    };
+    window.addEventListener('resize', resizeHandler);
 
     // 初始渲染侧边栏术语
     renderInlineTermList();
@@ -851,29 +862,52 @@ function renderWorkbench(container, projectId, fileId, strings, terms, currentSt
   renderPage();
 }
 
-function highlightTerms(text, terms) {
+export function highlightTerms(text, terms) {
   if (!terms || terms.length === 0) return escapeHtml(text);
   let res = escapeHtml(text);
   
   // 按照术语长度从长到短排序，防止短词优先替换导致长词被破坏（例如先匹配 sword 再匹配 word）
   const sortedTerms = [...terms].sort((a, b) => (b.term || '').length - (a.term || '').length);
   
+  // 存储所有生成的占位符及其对应的真实 HTML 替换值
+  const placeholders = [];
+  
+  // 用于生成唯一非冲突 Unicode 非字符占位符的函数
+  // 仅在 \uFDD0 ~ \uFDEF 范围编码索引，确保不包含任何普通的字母、数字或符号，防止被后续术语正则匹配
+  function getPlaceholder(index) {
+    const digits = String(index).split('');
+    const encoded = digits.map(d => String.fromCharCode(0xFDD2 + parseInt(d))).join('');
+    return `\uFDD0${encoded}\uFDD1`;
+  }
+  
   sortedTerms.forEach(t => {
     const termExp = buildTermRegex(t);
     if (!termExp) return;
     
-    // 使用 $& 保留原文的大小写，而不是用 t.term 强制替换为术语表的大小写
-    res = res.replace(termExp, `<span style="color: var(--accent-color); font-weight: 500; cursor: help; border-bottom: 1px dashed var(--accent-color);" title="${escapeHtml(t.translation||'')}">$&</span>`);
+    // 使用占位符暂时替代高亮的 HTML 标签，防止其内容被后续词项错误二次匹配
+    res = res.replace(termExp, (matched) => {
+      const ph = getPlaceholder(placeholders.length);
+      const html = `<span style="color: var(--accent-color); font-weight: 500; cursor: help; border-bottom: 1px dashed var(--accent-color);" title="${escapeHtml(t.translation||'')}">${matched}</span>`;
+      placeholders.push({ placeholder: ph, html });
+      return ph;
+    });
   });
+  
+  // 所有术语扫描替换完后，再批量反向替换回真正的 HTML
+  placeholders.forEach(({ placeholder, html }) => {
+    res = res.split(placeholder).join(html);
+  });
+  
   return res;
 }
+
 
 function escapeHtml(unsafe) {
   return (unsafe||'').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
 function escapeRegExp(string) {
-  return string.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&'); 
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); 
 }
 
 /**
@@ -901,4 +935,11 @@ function buildTermRegex(termObj) {
   const flags = termObj.caseSensitive ? 'g' : 'gi';
   
   return new RegExp(prefix + coreRegex + suffix, flags);
+}
+
+export function destroy() {
+  if (resizeHandler) {
+    window.removeEventListener('resize', resizeHandler);
+    resizeHandler = null;
+  }
 }
